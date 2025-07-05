@@ -103,6 +103,55 @@ fn translate_to_deno(parsed_args: ParseResult) -> Vec<String> {
         if !parsed_args.v8_args.is_empty() {
             deno_args.push(format!("--v8-flags={}", parsed_args.v8_args.join(",")));
         }
+        if !parsed_args
+            .options
+            .per_isolate
+            .per_env
+            .conditions
+            .is_empty()
+        {
+            deno_args.push(format!(
+                "--conditions={}",
+                parsed_args.options.per_isolate.per_env.conditions.join(",")
+            ));
+        }
+        if parsed_args
+            .options
+            .per_isolate
+            .per_env
+            .debug_options
+            .inspector_enabled
+        {
+            let arg = if parsed_args
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .break_first_line
+            {
+                "--inspect-brk"
+            } else {
+                "--inspect"
+            };
+            deno_args.push(format!(
+                "{}={}:{}",
+                arg,
+                parsed_args
+                    .options
+                    .per_isolate
+                    .per_env
+                    .debug_options
+                    .host_port
+                    .host,
+                parsed_args
+                    .options
+                    .per_isolate
+                    .per_env
+                    .debug_options
+                    .host_port
+                    .port
+            ));
+        }
         deno_args.push("--".to_string());
         deno_args.extend(parsed_args.remaining_args);
         return deno_args;
@@ -153,6 +202,55 @@ fn translate_to_deno(parsed_args: ParseResult) -> Vec<String> {
         if !parsed_args.v8_args.is_empty() {
             deno_args.push(format!("--v8-flags={}", parsed_args.v8_args.join(",")));
         }
+        if !parsed_args
+            .options
+            .per_isolate
+            .per_env
+            .conditions
+            .is_empty()
+        {
+            deno_args.push(format!(
+                "--conditions={}",
+                parsed_args.options.per_isolate.per_env.conditions.join(",")
+            ));
+        }
+        if parsed_args
+            .options
+            .per_isolate
+            .per_env
+            .debug_options
+            .inspector_enabled
+        {
+            let arg = if parsed_args
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .break_first_line
+            {
+                "--inspect-brk"
+            } else {
+                "--inspect"
+            };
+            deno_args.push(format!(
+                "{}={}:{}",
+                arg,
+                parsed_args
+                    .options
+                    .per_isolate
+                    .per_env
+                    .debug_options
+                    .host_port
+                    .host,
+                parsed_args
+                    .options
+                    .per_isolate
+                    .per_env
+                    .debug_options
+                    .host_port
+                    .port
+            ));
+        }
         deno_args.extend(parsed_args.remaining_args);
         return deno_args;
     }
@@ -202,7 +300,97 @@ fn translate_to_deno(parsed_args: ParseResult) -> Vec<String> {
     if !parsed_args.v8_args.is_empty() {
         deno_args.push(format!("--v8-flags={}", parsed_args.v8_args.join(",")));
     }
-    deno_args.extend(parsed_args.remaining_args);
+    if !parsed_args
+        .options
+        .per_isolate
+        .per_env
+        .conditions
+        .is_empty()
+    {
+        deno_args.push(format!(
+            "--conditions={}",
+            parsed_args.options.per_isolate.per_env.conditions.join(",")
+        ));
+    }
+    if parsed_args
+        .options
+        .per_isolate
+        .per_env
+        .debug_options
+        .inspector_enabled
+    {
+        let arg = if parsed_args
+            .options
+            .per_isolate
+            .per_env
+            .debug_options
+            .break_first_line
+        {
+            "--inspect-brk"
+        } else {
+            "--inspect"
+        };
+        deno_args.push(format!(
+            "{}={}:{}",
+            arg,
+            parsed_args
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .host_port
+                .host,
+            parsed_args
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .host_port
+                .port
+        ));
+    }
 
     deno_args
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Macro to create a Vec<String> from string literals
+    macro_rules! svec {
+        ($($x:expr),* $(,)?) => {
+            vec![$($x.to_string()),*]
+        };
+    }
+
+    /// Test that takes a `input: ["node"]` and `expected: ["deno", "repl", "-A", "--"] `
+    macro_rules! test {
+        ($name:ident, $input:tt , $expected:tt) => {
+            #[test]
+            fn $name() {
+                let parsed_args = node_cli_parser::parse_args(svec! $input).unwrap();
+                let result = translate_to_deno(parsed_args);
+                assert_eq!(result, svec! $expected);
+            }
+        };
+    }
+
+    test!(test_repl_no_args, [], ["node", "repl", "-A", "--"]);
+
+    test!(
+        test_run_script,
+        ["foo.js"],
+        [
+            "node",
+            "run",
+            "-A",
+            "--unstable-node-globals",
+            "--unstable-bare-node-builtins",
+            "--unstable-detect-cjs",
+            "--node-modules-dir=manual",
+            "--no-config",
+            "foo.js"
+        ]
+    );
 }

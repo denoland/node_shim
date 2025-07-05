@@ -13,13 +13,6 @@
 
 use std::collections::HashMap;
 
-/// Macro to create a Vec<String> from string literals
-macro_rules! svec {
-    ($($x:expr),* $(,)?) => {
-        vec![$($x.to_string()),*]
-    };
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum OptionType {
     NoOp,
@@ -539,7 +532,6 @@ impl EnvironmentOptions {
         if self.heap_prof && self.heap_prof_dir.is_empty() && !self.diagnostic_dir.is_empty() {
             self.heap_prof_dir = self.diagnostic_dir.clone();
         }
-
 
         self.debug_options.check_options(errors);
     }
@@ -2616,13 +2608,8 @@ impl OptionsParser {
         let mut options = PerProcessOptions::default();
         let mut synthetic_args = Vec::new();
 
-        // Skip program name if present
-        let mut i = if !args.is_empty() && !args[0].starts_with('-') {
-            v8_args.push(args[0].clone());
-            1
-        } else {
-            0
-        };
+        // The args does not contain the executable name, so we do not need to skip it.
+        let mut i = 0;
 
         while i < args.len() + synthetic_args.len() && errors.is_empty() {
             let arg = if !synthetic_args.is_empty() {
@@ -2802,7 +2789,10 @@ impl OptionsParser {
                         break;
                     };
 
-                    if next_val.starts_with('-') && (next_val.len() == 1 || !next_val[1..].chars().all(|c| c.is_ascii_digit())) {
+                    if next_val.starts_with('-')
+                        && (next_val.len() == 1
+                            || !next_val[1..].chars().all(|c| c.is_ascii_digit()))
+                    {
                         errors.push(format!("{} requires an argument", original_name));
                         break;
                     }
@@ -2842,7 +2832,10 @@ impl OptionsParser {
         args.splice(0..0, synthetic_args);
 
         // Watch mode validation - check if --watch is used without files and not in test mode
-        if options.per_isolate.per_env.watch_mode && !options.per_isolate.per_env.test_runner && args.is_empty() {
+        if options.per_isolate.per_env.watch_mode
+            && !options.per_isolate.per_env.test_runner
+            && args.is_empty()
+        {
             errors.push("--watch requires specifying a file".to_string());
         }
 
@@ -2932,21 +2925,28 @@ pub fn parse_args(args: Vec<String>) -> Result<ParseResult, Vec<String>> {
 mod tests {
     use super::*;
 
+    /// Macro to create a Vec<String> from string literals
+    macro_rules! svec {
+        ($($x:expr),* $(,)?) => {
+            vec![$($x.to_string()),*]
+        };
+    }
+
     #[test]
     fn test_basic_parsing() {
-        let result = parse_args(svec!["node", "--version"]).unwrap();
+        let result = parse_args(svec!["--version"]).unwrap();
         assert!(result.options.print_version);
     }
 
     #[test]
     fn test_help_parsing() {
-        let result = parse_args(svec!["node", "--help"]).unwrap();
+        let result = parse_args(svec!["--help"]).unwrap();
         assert!(result.options.print_help);
     }
 
     #[test]
     fn test_debug_options() {
-        let result = parse_args(svec!["node", "--inspect"]).unwrap();
+        let result = parse_args(svec!["--inspect"]).unwrap();
         assert!(
             result
                 .options
@@ -2959,19 +2959,19 @@ mod tests {
 
     #[test]
     fn test_string_option() {
-        let result = parse_args(svec!["node", "--title", "myapp"]).unwrap();
+        let result = parse_args(svec!["--title", "myapp"]).unwrap();
         assert_eq!(result.options.title, "myapp");
     }
 
     #[test]
     fn test_boolean_negation() {
-        let result = parse_args(svec!["node", "--no-warnings"]).unwrap();
+        let result = parse_args(svec!["--no-warnings"]).unwrap();
         assert!(!result.options.per_isolate.per_env.warnings);
     }
 
     #[test]
     fn test_alias_expansion() {
-        let result = parse_args(svec!["node", "-v"]).unwrap();
+        let result = parse_args(svec!["-v"]).unwrap();
         assert!(result.options.print_version);
     }
 
@@ -2983,7 +2983,7 @@ mod tests {
 
     #[test]
     fn test_host_port_parsing() {
-        let result = parse_args(svec!["node", "--inspect-port", "127.0.0.1:9229"]).unwrap();
+        let result = parse_args(svec!["--inspect-port", "127.0.0.1:9229"]).unwrap();
         assert_eq!(
             result
                 .options
@@ -3009,143 +3009,209 @@ mod tests {
     // Tests for incompatible argument combinations
     #[test]
     fn test_check_eval_incompatible() {
-        let result = parse_args(svec!["node", "--check", "--eval", "console.log(42)"]);
+        let result = parse_args(svec!["--check", "--eval", "console.log(42)"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("either --check or --eval can be used, not both")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("either --check or --eval can be used, not both"))
+        );
     }
 
     #[test]
     fn test_test_check_incompatible() {
-        let result = parse_args(svec!["node", "--test", "--check"]);
+        let result = parse_args(svec!["--test", "--check"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("either --test or --check can be used, not both")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("either --test or --check can be used, not both"))
+        );
     }
 
     #[test]
     fn test_test_eval_incompatible() {
-        let result = parse_args(svec!["node", "--test", "--eval", "console.log(42)"]);
+        let result = parse_args(svec!["--test", "--eval", "console.log(42)"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("either --test or --eval can be used, not both")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("either --test or --eval can be used, not both"))
+        );
     }
 
     #[test]
     fn test_test_interactive_incompatible() {
-        let result = parse_args(svec!["node", "--test", "--interactive"]);
+        let result = parse_args(svec!["--test", "--interactive"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("either --test or --interactive can be used, not both")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("either --test or --interactive can be used, not both"))
+        );
     }
 
     #[test]
     fn test_test_watch_path_incompatible() {
-        let result = parse_args(svec!["node", "--test", "--watch-path", "."]);
+        let result = parse_args(svec!["--test", "--watch-path", "."]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("--watch-path cannot be used in combination with --test")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("--watch-path cannot be used in combination with --test"))
+        );
     }
 
     #[test]
     fn test_watch_check_incompatible() {
-        let result = parse_args(svec!["node", "--watch", "--check"]);
+        let result = parse_args(svec!["--watch", "--check"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("either --watch or --check can be used, not both")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("either --watch or --check can be used, not both"))
+        );
     }
 
     #[test]
     fn test_watch_eval_incompatible() {
-        let result = parse_args(svec!["node", "--watch", "--eval", "console.log(42)"]);
+        let result = parse_args(svec!["--watch", "--eval", "console.log(42)"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("either --watch or --eval can be used, not both")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("either --watch or --eval can be used, not both"))
+        );
     }
 
     #[test]
     fn test_watch_interactive_incompatible() {
-        let result = parse_args(svec!["node", "--watch", "--interactive"]);
+        let result = parse_args(svec!["--watch", "--interactive"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("either --watch or --interactive can be used, not both")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("either --watch or --interactive can be used, not both"))
+        );
     }
 
     #[test]
     fn test_watch_test_force_exit_incompatible() {
-        let result = parse_args(svec!["node", "--watch", "--test-force-exit"]);
+        let result = parse_args(svec!["--watch", "--test-force-exit"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("either --watch or --test-force-exit can be used, not both")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("either --watch or --test-force-exit can be used, not both"))
+        );
     }
 
     #[test]
     fn test_tls_min_max_incompatible() {
-        let result = parse_args(svec!["node", "--tls-min-v1.3", "--tls-max-v1.2"]);
+        let result = parse_args(svec!["--tls-min-v1.3", "--tls-max-v1.2"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("either --tls-min-v1.3 or --tls-max-v1.2 can be used, not both")));
+        assert!(
+            errors.iter().any(
+                |e| e.contains("either --tls-min-v1.3 or --tls-max-v1.2 can be used, not both")
+            )
+        );
     }
 
     #[test]
     fn test_openssl_ca_bundled_ca_incompatible() {
-        let result = parse_args(svec!["node", "--use-openssl-ca", "--use-bundled-ca"]);
+        let result = parse_args(svec!["--use-openssl-ca", "--use-bundled-ca"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("either --use-openssl-ca or --use-bundled-ca can be used, not both")));
+        assert!(errors.iter().any(|e| {
+            e.contains("either --use-openssl-ca or --use-bundled-ca can be used, not both")
+        }));
     }
 
     #[test]
     fn test_cpu_prof_name_without_cpu_prof() {
-        let result = parse_args(svec!["node", "--cpu-prof-name", "profile.log"]);
+        let result = parse_args(svec!["--cpu-prof-name", "profile.log"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("--cpu-prof-name must be used with --cpu-prof")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("--cpu-prof-name must be used with --cpu-prof"))
+        );
     }
 
     #[test]
     fn test_cpu_prof_dir_without_cpu_prof() {
-        let result = parse_args(svec!["node", "--cpu-prof-dir", "/tmp"]);
+        let result = parse_args(svec!["--cpu-prof-dir", "/tmp"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("--cpu-prof-dir must be used with --cpu-prof")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("--cpu-prof-dir must be used with --cpu-prof"))
+        );
     }
 
     #[test]
     fn test_cpu_prof_interval_without_cpu_prof() {
-        let result = parse_args(svec!["node", "--cpu-prof-interval", "500"]);
+        let result = parse_args(svec!["--cpu-prof-interval", "500"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("--cpu-prof-interval must be used with --cpu-prof")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("--cpu-prof-interval must be used with --cpu-prof"))
+        );
     }
 
     #[test]
     fn test_heap_prof_name_without_heap_prof() {
-        let result = parse_args(svec!["node", "--heap-prof-name", "heap.log"]);
+        let result = parse_args(svec!["--heap-prof-name", "heap.log"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("--heap-prof-name must be used with --heap-prof")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("--heap-prof-name must be used with --heap-prof"))
+        );
     }
 
     #[test]
     fn test_heap_prof_dir_without_heap_prof() {
-        let result = parse_args(svec!["node", "--heap-prof-dir", "/tmp"]);
+        let result = parse_args(svec!["--heap-prof-dir", "/tmp"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("--heap-prof-dir must be used with --heap-prof")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("--heap-prof-dir must be used with --heap-prof"))
+        );
     }
 
     #[test]
     fn test_heap_prof_interval_without_heap_prof() {
-        let result = parse_args(svec!["node", "--heap-prof-interval", "1024"]);
+        let result = parse_args(svec!["--heap-prof-interval", "1024"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("--heap-prof-interval must be used with --heap-prof")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("--heap-prof-interval must be used with --heap-prof"))
+        );
     }
 
     #[test]
     fn test_invalid_input_type() {
-        let result = parse_args(svec!["node", "--input-type", "invalid"]);
+        let result = parse_args(svec!["--input-type", "invalid"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert!(errors.iter().any(|e| e.contains("--input-type must be \"module\", \"commonjs\", \"module-typescript\" or \"commonjs-typescript\"")));
@@ -3153,63 +3219,91 @@ mod tests {
 
     #[test]
     fn test_invalid_unhandled_rejections() {
-        let result = parse_args(svec!["node", "--unhandled-rejections", "invalid"]);
+        let result = parse_args(svec!["--unhandled-rejections", "invalid"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("invalid value for --unhandled-rejections")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("invalid value for --unhandled-rejections"))
+        );
     }
 
     #[test]
     fn test_invalid_trace_require_module() {
-        let result = parse_args(svec!["node", "--trace-require-module", "invalid"]);
+        let result = parse_args(svec!["--trace-require-module", "invalid"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("invalid value for --trace-require-module")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("invalid value for --trace-require-module"))
+        );
     }
 
     #[test]
     fn test_invalid_test_isolation() {
-        let result = parse_args(svec!["node", "--test", "--test-isolation", "invalid"]);
+        let result = parse_args(svec!["--test", "--test-isolation", "invalid"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("invalid value for --test-isolation")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("invalid value for --test-isolation"))
+        );
     }
 
     #[test]
     fn test_invalid_use_largepages() {
-        let result = parse_args(svec!["node", "--use-largepages", "invalid"]);
+        let result = parse_args(svec!["--use-largepages", "invalid"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("invalid value for --use-largepages")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("invalid value for --use-largepages"))
+        );
     }
 
     #[test]
     fn test_negative_heapsnapshot_near_heap_limit() {
-        let result = parse_args(svec!["node", "--heapsnapshot-near-heap-limit", "-1"]);
+        let result = parse_args(svec!["--heapsnapshot-near-heap-limit", "-1"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("--heapsnapshot-near-heap-limit must not be negative")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("--heapsnapshot-near-heap-limit must not be negative"))
+        );
     }
 
     #[test]
     fn test_secure_heap_not_power_of_two() {
-        let result = parse_args(svec!["node", "--secure-heap", "3"]);
+        let result = parse_args(svec!["--secure-heap", "3"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("--secure-heap must be a power of 2")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("--secure-heap must be a power of 2"))
+        );
     }
 
     #[test]
     fn test_secure_heap_min_not_power_of_two() {
-        let result = parse_args(svec!["node", "--secure-heap", "4", "--secure-heap-min", "3"]);
+        let result = parse_args(svec!["--secure-heap", "4", "--secure-heap-min", "3"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("--secure-heap-min must be a power of 2")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("--secure-heap-min must be a power of 2"))
+        );
     }
 
     #[test]
     fn test_deprecated_debug_options() {
-        let result = parse_args(svec!["node", "--debug"]);
+        let result = parse_args(svec!["--debug"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert!(errors.iter().any(|e| e.contains("[DEP0062]: `node --debug` and `node --debug-brk` are invalid. Please use `node --inspect` and `node --inspect-brk` instead.")));
@@ -3217,7 +3311,7 @@ mod tests {
 
     #[test]
     fn test_deprecated_debug_brk_options() {
-        let result = parse_args(svec!["node", "--debug-brk"]);
+        let result = parse_args(svec!["--debug-brk"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert!(errors.iter().any(|e| e.contains("[DEP0062]: `node --debug` and `node --debug-brk` are invalid. Please use `node --inspect` and `node --inspect-brk` instead.")));
@@ -3225,103 +3319,173 @@ mod tests {
 
     #[test]
     fn test_invalid_inspect_publish_uid() {
-        let result = parse_args(svec!["node", "--inspect-publish-uid", "invalid"]);
+        let result = parse_args(svec!["--inspect-publish-uid", "invalid"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("--inspect-publish-uid destination can be stderr or http")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("--inspect-publish-uid destination can be stderr or http"))
+        );
     }
 
     #[test]
     fn test_watch_requires_file_when_not_test() {
-        let result = parse_args(svec!["node", "--watch"]);
+        let result = parse_args(svec!["--watch"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("--watch requires specifying a file")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("--watch requires specifying a file"))
+        );
     }
 
     #[test]
     fn test_invalid_negation_for_non_boolean() {
-        let result = parse_args(svec!["node", "--no-title"]);
+        let result = parse_args(svec!["--no-title"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("is an invalid negation because it is not a boolean option")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("is an invalid negation because it is not a boolean option"))
+        );
     }
 
     #[test]
     fn test_option_requires_argument() {
-        let result = parse_args(svec!["node", "--title"]);
+        let result = parse_args(svec!["--title"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("--title requires an argument")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("--title requires an argument"))
+        );
     }
 
     #[test]
     fn test_option_with_empty_equals_value() {
-        let result = parse_args(svec!["node", "--title="]);
+        let result = parse_args(svec!["--title="]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("--title= requires an argument")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("--title= requires an argument"))
+        );
     }
 
     #[test]
     fn test_option_with_dash_as_value() {
-        let result = parse_args(svec!["node", "--title", "-"]);
+        let result = parse_args(svec!["--title", "-"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("--title requires an argument")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("--title requires an argument"))
+        );
     }
 
     #[test]
     fn test_invalid_port_range() {
-        let result = parse_args(svec!["node", "--inspect-port", "99999"]);
+        let result = parse_args(svec!["--inspect-port", "99999"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("must be 0 or in range 1024 to 65535")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("must be 0 or in range 1024 to 65535"))
+        );
     }
 
     #[test]
     fn test_invalid_port_low() {
-        let result = parse_args(svec!["node", "--inspect-port", "500"]);
+        let result = parse_args(svec!["--inspect-port", "500"]);
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("must be 0 or in range 1024 to 65535")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("must be 0 or in range 1024 to 65535"))
+        );
     }
 
     #[test]
     fn test_escaped_dash_in_value() {
-        let result = parse_args(svec!["node", "--title", "\\-mytitle"]).unwrap();
+        let result = parse_args(svec!["--title", "\\-mytitle"]).unwrap();
         assert_eq!(result.options.title, "-mytitle");
     }
 
     #[test]
     fn test_compatible_profiling_options() {
-        let result = parse_args(svec!["node", "--cpu-prof", "--cpu-prof-name", "profile.log", "--cpu-prof-dir", "/tmp", "--cpu-prof-interval", "500"]).unwrap();
+        let result = parse_args(svec![
+            "--cpu-prof",
+            "--cpu-prof-name",
+            "profile.log",
+            "--cpu-prof-dir",
+            "/tmp",
+            "--cpu-prof-interval",
+            "500"
+        ])
+        .unwrap();
         assert!(result.options.per_isolate.per_env.cpu_prof);
-        assert_eq!(result.options.per_isolate.per_env.cpu_prof_name, "profile.log");
+        assert_eq!(
+            result.options.per_isolate.per_env.cpu_prof_name,
+            "profile.log"
+        );
         assert_eq!(result.options.per_isolate.per_env.cpu_prof_dir, "/tmp");
         assert_eq!(result.options.per_isolate.per_env.cpu_prof_interval, 500);
     }
 
     #[test]
     fn test_compatible_heap_profiling_options() {
-        let result = parse_args(svec!["node", "--heap-prof", "--heap-prof-name", "heap.log", "--heap-prof-dir", "/tmp", "--heap-prof-interval", "1024"]).unwrap();
+        let result = parse_args(svec![
+            "--heap-prof",
+            "--heap-prof-name",
+            "heap.log",
+            "--heap-prof-dir",
+            "/tmp",
+            "--heap-prof-interval",
+            "1024"
+        ])
+        .unwrap();
         assert!(result.options.per_isolate.per_env.heap_prof);
-        assert_eq!(result.options.per_isolate.per_env.heap_prof_name, "heap.log");
+        assert_eq!(
+            result.options.per_isolate.per_env.heap_prof_name,
+            "heap.log"
+        );
         assert_eq!(result.options.per_isolate.per_env.heap_prof_dir, "/tmp");
         assert_eq!(result.options.per_isolate.per_env.heap_prof_interval, 1024);
     }
 
     #[test]
     fn test_diagnostic_dir_used_for_prof_dirs() {
-        let result = parse_args(svec!["node", "--cpu-prof", "--heap-prof", "--diagnostic-dir", "/tmp/diag"]).unwrap();
+        let result = parse_args(svec![
+            "--cpu-prof",
+            "--heap-prof",
+            "--diagnostic-dir",
+            "/tmp/diag"
+        ])
+        .unwrap();
         assert_eq!(result.options.per_isolate.per_env.cpu_prof_dir, "/tmp/diag");
-        assert_eq!(result.options.per_isolate.per_env.heap_prof_dir, "/tmp/diag");
+        assert_eq!(
+            result.options.per_isolate.per_env.heap_prof_dir,
+            "/tmp/diag"
+        );
     }
 
     #[test]
     fn test_valid_input_types() {
-        for input_type in &["commonjs", "module", "commonjs-typescript", "module-typescript"] {
-            let result = parse_args(svec!["node", "--input-type", input_type]).unwrap();
+        for input_type in &[
+            "commonjs",
+            "module",
+            "commonjs-typescript",
+            "module-typescript",
+        ] {
+            let result = parse_args(svec!["--input-type", input_type]).unwrap();
             assert_eq!(result.options.per_isolate.per_env.input_type, *input_type);
         }
     }
@@ -3329,45 +3493,70 @@ mod tests {
     #[test]
     fn test_valid_unhandled_rejections() {
         for rejection_type in &["warn-with-error-code", "throw", "strict", "warn", "none"] {
-            let result = parse_args(svec!["node", "--unhandled-rejections", rejection_type]).unwrap();
-            assert_eq!(result.options.per_isolate.per_env.unhandled_rejections, *rejection_type);
+            let result = parse_args(svec!["--unhandled-rejections", rejection_type]).unwrap();
+            assert_eq!(
+                result.options.per_isolate.per_env.unhandled_rejections,
+                *rejection_type
+            );
         }
     }
 
     #[test]
     fn test_valid_trace_require_module() {
         for trace_type in &["all", "no-node-modules"] {
-            let result = parse_args(svec!["node", "--trace-require-module", trace_type]).unwrap();
-            assert_eq!(result.options.per_isolate.per_env.trace_require_module, *trace_type);
+            let result = parse_args(svec!["--trace-require-module", trace_type]).unwrap();
+            assert_eq!(
+                result.options.per_isolate.per_env.trace_require_module,
+                *trace_type
+            );
         }
     }
 
     #[test]
     fn test_valid_test_isolation() {
         for isolation_type in &["process", "none"] {
-            let result = parse_args(svec!["node", "--test", "--test-isolation", isolation_type]).unwrap();
-            assert_eq!(result.options.per_isolate.per_env.test_isolation, *isolation_type);
+            let result = parse_args(svec!["--test", "--test-isolation", isolation_type]).unwrap();
+            assert_eq!(
+                result.options.per_isolate.per_env.test_isolation,
+                *isolation_type
+            );
         }
     }
 
     #[test]
     fn test_valid_use_largepages() {
         for largepages_type in &["off", "on", "silent"] {
-            let result = parse_args(svec!["node", "--use-largepages", largepages_type]).unwrap();
+            let result = parse_args(svec!["--use-largepages", largepages_type]).unwrap();
             assert_eq!(result.options.use_largepages, *largepages_type);
         }
     }
 
     #[test]
     fn test_valid_inspect_publish_uid() {
-        let result = parse_args(svec!["node", "--inspect-publish-uid", "stderr,http"]).unwrap();
-        assert!(result.options.per_isolate.per_env.debug_options.inspect_publish_uid.console);
-        assert!(result.options.per_isolate.per_env.debug_options.inspect_publish_uid.http);
+        let result = parse_args(svec!["--inspect-publish-uid", "stderr,http"]).unwrap();
+        assert!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .inspect_publish_uid
+                .console
+        );
+        assert!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .inspect_publish_uid
+                .http
+        );
     }
 
     #[test]
     fn test_valid_secure_heap_power_of_two() {
-        let result = parse_args(svec!["node", "--secure-heap", "4", "--secure-heap-min", "2"]).unwrap();
+        let result = parse_args(svec!["--secure-heap", "4", "--secure-heap-min", "2"]).unwrap();
         assert_eq!(result.options.secure_heap, 4);
         assert_eq!(result.options.secure_heap_min, 2);
     }
@@ -3375,28 +3564,45 @@ mod tests {
     #[test]
     fn test_implications_work() {
         // Test that --inspect-brk implies --inspect
-        let result = parse_args(svec!["node", "--inspect-brk"]).unwrap();
-        assert!(result.options.per_isolate.per_env.debug_options.break_first_line);
-        assert!(result.options.per_isolate.per_env.debug_options.inspector_enabled);
+        let result = parse_args(svec!["--inspect-brk"]).unwrap();
+        assert!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .break_first_line
+        );
+        assert!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .inspector_enabled
+        );
     }
 
     #[test]
     fn test_alias_expansion_works() {
         // Test that -v expands to --version
-        let result = parse_args(svec!["node", "-v"]).unwrap();
+        let result = parse_args(svec!["-v"]).unwrap();
         assert!(result.options.print_version);
 
         // Test that -pe expands to --print --eval
-        let result = parse_args(svec!["node", "-pe", "console.log(42)"]).unwrap();
+        let result = parse_args(svec!["-pe", "console.log(42)"]).unwrap();
         assert!(result.options.per_isolate.per_env.print_eval);
         assert!(result.options.per_isolate.per_env.has_eval_string);
-        assert_eq!(result.options.per_isolate.per_env.eval_string, "console.log(42)");
+        assert_eq!(
+            result.options.per_isolate.per_env.eval_string,
+            "console.log(42)"
+        );
     }
 
     #[test]
     fn test_underscore_normalization() {
         // Test that underscores get normalized to dashes
-        let result = parse_args(svec!["node", "--zero_fill_buffers"]).unwrap();
+        let result = parse_args(svec!["--zero_fill_buffers"]).unwrap();
         assert!(result.options.zero_fill_all_buffers);
     }
 }
