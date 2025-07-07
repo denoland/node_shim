@@ -349,6 +349,7 @@ fn translate_to_deno(parsed_args: ParseResult) -> Vec<String> {
                 .port
         ));
     }
+    deno_args.extend_from_slice(&parsed_args.remaining_args);
 
     deno_args
 }

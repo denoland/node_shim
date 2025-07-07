@@ -2602,7 +2602,6 @@ impl OptionsParser {
     pub fn parse(&self, args: Vec<String>) -> Result<ParseResult, Vec<String>> {
         let mut args = args;
 
-        let mut exec_args = Vec::new();
         let mut v8_args = Vec::new();
         let mut errors = Vec::new();
         let mut options = PerProcessOptions::default();
@@ -2633,11 +2632,6 @@ impl OptionsParser {
 
             if arg == "--" {
                 break;
-            }
-
-            // Add to exec_args if from original args
-            if synthetic_args.is_empty() {
-                exec_args.push(arg.clone());
             }
 
             let (name, value, has_equals) = if arg.starts_with("--") {
@@ -2846,7 +2840,6 @@ impl OptionsParser {
             Ok(ParseResult {
                 options,
                 remaining_args: args,
-                exec_args,
                 v8_args,
             })
         } else {
@@ -2859,7 +2852,6 @@ impl OptionsParser {
 pub struct ParseResult {
     pub options: PerProcessOptions,
     pub remaining_args: Vec<String>,
-    pub exec_args: Vec<String>,
     pub v8_args: Vec<String>,
 }
 
