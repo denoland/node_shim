@@ -3,7 +3,8 @@ mod node_cli_parser;
 use exec::execvp;
 use node_cli_parser::ParseResult;
 use std::env;
-use std::process;
+use std::path::Path;
+use std::process::{self, Stdio};
 
 fn main() {
     let args = env::args().skip(1).collect::<Vec<String>>();
@@ -349,9 +350,48 @@ fn translate_to_deno(parsed_args: ParseResult) -> Vec<String> {
                 .port
         ));
     }
-    deno_args.extend_from_slice(&parsed_args.remaining_args);
+    if parsed_args.remaining_args.is_empty() {
+        eprintln!("Error: No entrypoint provided. Please specify a script to run.");
+        process::exit(1);
+    }
+    let entrypoint = parsed_args.remaining_args[0].as_str();
+    let resolved_entrypoint = resolve_entrypoint(entrypoint);
+    deno_args.push(resolved_entrypoint);
+    deno_args.extend_from_slice(&parsed_args.remaining_args[1..]);
 
     deno_args
+}
+
+fn resolve_entrypoint(entrypoint: &str) -> String {
+    let cwd = env::current_dir().unwrap();
+    // If the entrypoint is either an absolute path, or a relative path that exists,
+    // return it as is.
+    if cwd.join(entrypoint).symlink_metadata().is_ok() {
+        return entrypoint.to_string();
+    }
+
+    let url = url::Url::from_file_path(cwd.join("$file.js")).unwrap();
+
+    // Otherwise, shell out to `deno` to try to resolve the entrypoint.
+    let output = process::Command::new("deno")
+        .arg("eval")
+        .arg("--no-config")
+        .arg(include_str!("./resolve.js"))
+        .arg(url.to_string())
+        .arg(format!("./{}", entrypoint))
+        .env_clear()
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .output()
+        .expect("Failed to execute deno resolve script");
+    if !output.status.success() {
+        std::process::exit(output.status.code().unwrap_or(1));
+    }
+    let resolved_path = String::from_utf8(output.stdout)
+        .expect("Failed to parse deno resolve output")
+        .trim()
+        .to_string();
+    return resolved_path;
 }
 
 #[cfg(test)]
