@@ -407,7 +407,7 @@ mod tests {
         ($name:ident, $input:tt , $expected:tt) => {
             #[test]
             fn $name() {
-                let parsed_args = node_cli_parser::parse_args(svec! $input).unwrap();
+                let parsed_args = node_shim::parse_args(svec! $input).unwrap();
                 let result = translate_to_deno(parsed_args);
                 assert_eq!(result, svec! $expected);
             }
