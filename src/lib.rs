@@ -59,19 +59,10 @@ impl HostPort {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct InspectPublishUid {
     pub console: bool,
     pub http: bool,
-}
-
-impl Default for InspectPublishUid {
-    fn default() -> Self {
-        Self {
-            console: false,
-            http: false,
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -104,20 +95,24 @@ impl Default for DebugOptions {
 }
 
 impl DebugOptions {
+    #[allow(dead_code)]
     pub fn enable_break_first_line(&mut self) {
         self.inspector_enabled = true;
         self.break_first_line = true;
     }
 
+    #[allow(dead_code)]
     pub fn disable_wait_or_break_first_line(&mut self) {
         self.inspect_wait = false;
         self.break_first_line = false;
     }
 
+    #[allow(dead_code)]
     pub fn wait_for_connect(&self) -> bool {
         self.break_first_line || self.break_node_first_line || self.inspect_wait
     }
 
+    #[allow(dead_code)]
     pub fn should_break_first_line(&self) -> bool {
         self.break_first_line || self.break_node_first_line
     }
@@ -145,6 +140,7 @@ impl DebugOptions {
 
 #[derive(Debug, Clone)]
 pub struct EnvironmentOptions {
+    #[allow(dead_code)]
     pub abort_on_uncaught_exception: bool,
     pub conditions: Vec<String>,
     pub detect_module: bool,
@@ -155,6 +151,7 @@ pub struct EnvironmentOptions {
     pub enable_source_maps: bool,
     pub experimental_addon_modules: bool,
     pub experimental_eventsource: bool,
+    #[allow(dead_code)]
     pub experimental_fetch: bool,
     pub experimental_websocket: bool,
     pub experimental_sqlite: bool,
@@ -162,6 +159,7 @@ pub struct EnvironmentOptions {
     pub experimental_quic: bool,
     pub localstorage_file: String,
     pub experimental_global_navigator: bool,
+    #[allow(dead_code)]
     pub experimental_global_web_crypto: bool,
     pub experimental_wasm_modules: bool,
     pub experimental_import_meta_resolve: bool,
@@ -250,6 +248,7 @@ pub struct EnvironmentOptions {
     pub userland_loaders: Vec<String>,
     pub verify_base_objects: bool,
     pub watch_mode: bool,
+    #[allow(dead_code)]
     pub watch_mode_report_to_parent: bool,
     pub watch_mode_preserve_output: bool,
     pub watch_mode_kill_signal: String,
@@ -271,6 +270,7 @@ pub struct EnvironmentOptions {
     pub preload_esm_modules: Vec<String>,
     pub experimental_strip_types: bool,
     pub experimental_transform_types: bool,
+    #[allow(dead_code)]
     pub user_argv: Vec<String>,
     pub report_exclude_env: bool,
     pub report_exclude_network: bool,
@@ -420,26 +420,26 @@ impl Default for EnvironmentOptions {
 
 impl EnvironmentOptions {
     pub fn check_options(&mut self, errors: &mut Vec<String>) {
-        if !self.input_type.is_empty() {
-            if !matches!(
+        if !self.input_type.is_empty()
+            && !matches!(
                 self.input_type.as_str(),
                 "commonjs" | "module" | "commonjs-typescript" | "module-typescript"
-            ) {
-                errors.push("--input-type must be \"module\", \"commonjs\", \"module-typescript\" or \"commonjs-typescript\"".to_string());
-            }
+            )
+        {
+            errors.push("--input-type must be \"module\", \"commonjs\", \"module-typescript\" or \"commonjs-typescript\"".to_string());
         }
 
         if self.syntax_check_only && self.has_eval_string {
             errors.push("either --check or --eval can be used, not both".to_string());
         }
 
-        if !self.unhandled_rejections.is_empty() {
-            if !matches!(
+        if !self.unhandled_rejections.is_empty()
+            && !matches!(
                 self.unhandled_rejections.as_str(),
                 "warn-with-error-code" | "throw" | "strict" | "warn" | "none"
-            ) {
-                errors.push("invalid value for --unhandled-rejections".to_string());
-            }
+            )
+        {
+            errors.push("invalid value for --unhandled-rejections".to_string());
         }
 
         if self.tls_min_v1_3 && self.tls_max_v1_2 {
@@ -451,13 +451,13 @@ impl EnvironmentOptions {
             errors.push("--heapsnapshot-near-heap-limit must not be negative".to_string());
         }
 
-        if !self.trace_require_module.is_empty() {
-            if !matches!(
+        if !self.trace_require_module.is_empty()
+            && !matches!(
                 self.trace_require_module.as_str(),
                 "all" | "no-node-modules"
-            ) {
-                errors.push("invalid value for --trace-require-module".to_string());
-            }
+            )
+        {
+            errors.push("invalid value for --trace-require-module".to_string());
         }
 
         if self.test_runner {
@@ -689,7 +689,7 @@ impl PerProcessOptions {
 }
 
 fn remove_brackets(host: &str) -> String {
-    if host.len() > 0 && host.starts_with('[') && host.ends_with(']') {
+    if !host.is_empty() && host.starts_with('[') && host.ends_with(']') {
         host[1..host.len() - 1].to_string()
     } else {
         host.to_string()
@@ -736,8 +736,11 @@ fn split_host_port(arg: &str, errors: &mut Vec<String>) -> HostPort {
 #[derive(Debug, Clone)]
 struct OptionInfo {
     option_type: OptionType,
+    #[allow(dead_code)]
     env_setting: OptionEnvvarSettings,
+    #[allow(dead_code)]
     help_text: String,
+    #[allow(dead_code)]
     default_is_true: bool,
 }
 
@@ -2661,11 +2664,12 @@ impl OptionsParser {
             }
 
             // Handle negation
-            let (is_negation, final_name) = if normalized_name.starts_with("--no-") {
-                (true, "--".to_string() + &normalized_name[5..])
-            } else {
-                (false, normalized_name)
-            };
+            let (is_negation, final_name) =
+                if let Some(stripped) = normalized_name.strip_prefix("--no-") {
+                    (true, "--".to_string() + stripped)
+                } else {
+                    (false, normalized_name)
+                };
 
             // Expand aliases
             let mut current_name = final_name.clone();
@@ -2714,12 +2718,12 @@ impl OptionsParser {
             if let Some(implications) = self.implications.get(&implied_name) {
                 for implication in implications {
                     if implication.starts_with("--") {
-                        if implication.starts_with("--no-") {
-                            let target_name = "--".to_string() + &implication[5..];
-                            if let Some(option_info) = self.options.get(&target_name) {
-                                if option_info.option_type == OptionType::Boolean {
-                                    self.set_boolean_field(&mut options, &target_name, false);
-                                }
+                        if let Some(stripped) = implication.strip_prefix("--no-") {
+                            let target_name = "--".to_string() + stripped;
+                            if let Some(option_info) = self.options.get(&target_name)
+                                && option_info.option_type == OptionType::Boolean
+                            {
+                                self.set_boolean_field(&mut options, &target_name, false);
                             }
                         } else {
                             // Check if it's a boolean option we handle
@@ -2735,10 +2739,10 @@ impl OptionsParser {
                         }
                     } else {
                         // Handle special implications like [has_eval_string]
-                        if let Some(option_info) = self.options.get(implication) {
-                            if option_info.option_type == OptionType::Boolean {
-                                self.set_boolean_field(&mut options, implication, true);
-                            }
+                        if let Some(option_info) = self.options.get(implication)
+                            && option_info.option_type == OptionType::Boolean
+                        {
+                            self.set_boolean_field(&mut options, implication, true);
                         }
                     }
                 }
@@ -2890,10 +2894,8 @@ pub fn parse_node_options_env_var(node_options: &str) -> Result<Vec<String>, Vec
         if will_start_new_arg {
             env_argv.push(c.to_string());
             will_start_new_arg = false;
-        } else {
-            if let Some(last) = env_argv.last_mut() {
-                last.push(c);
-            }
+        } else if let Some(last) = env_argv.last_mut() {
+            last.push(c);
         }
 
         index += 1;
@@ -3043,7 +3045,7 @@ mod tests {
         assert!(
             errors
                 .iter()
-                .any(|e| e.contains("either --test or --interactive can be used, not both"))
+                .any(|e| { e.contains("either --test or --interactive can be used, not both") })
         );
     }
 
@@ -3055,7 +3057,7 @@ mod tests {
         assert!(
             errors
                 .iter()
-                .any(|e| e.contains("--watch-path cannot be used in combination with --test"))
+                .any(|e| { e.contains("--watch-path cannot be used in combination with --test") })
         );
     }
 
@@ -3091,7 +3093,7 @@ mod tests {
         assert!(
             errors
                 .iter()
-                .any(|e| e.contains("either --watch or --interactive can be used, not both"))
+                .any(|e| { e.contains("either --watch or --interactive can be used, not both") })
         );
     }
 
@@ -3101,9 +3103,9 @@ mod tests {
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert!(
-            errors
-                .iter()
-                .any(|e| e.contains("either --watch or --test-force-exit can be used, not both"))
+            errors.iter().any(|e| {
+                e.contains("either --watch or --test-force-exit can be used, not both")
+            })
         );
     }
 
@@ -3197,7 +3199,7 @@ mod tests {
         assert!(
             errors
                 .iter()
-                .any(|e| e.contains("--heap-prof-interval must be used with --heap-prof"))
+                .any(|e| { e.contains("--heap-prof-interval must be used with --heap-prof") })
         );
     }
 
@@ -3265,7 +3267,7 @@ mod tests {
         assert!(
             errors
                 .iter()
-                .any(|e| e.contains("--heapsnapshot-near-heap-limit must not be negative"))
+                .any(|e| { e.contains("--heapsnapshot-near-heap-limit must not be negative") })
         );
     }
 
@@ -3317,7 +3319,7 @@ mod tests {
         assert!(
             errors
                 .iter()
-                .any(|e| e.contains("--inspect-publish-uid destination can be stderr or http"))
+                .any(|e| { e.contains("--inspect-publish-uid destination can be stderr or http") })
         );
     }
 
@@ -3339,9 +3341,9 @@ mod tests {
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert!(
-            errors
-                .iter()
-                .any(|e| e.contains("is an invalid negation because it is not a boolean option"))
+            errors.iter().any(|e| {
+                e.contains("is an invalid negation because it is not a boolean option")
+            })
         );
     }
 

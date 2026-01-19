@@ -1,15 +1,12 @@
-mod node_cli_parser;
-
 use exec::execvp;
-use node_cli_parser::ParseResult;
+use node_shim::ParseResult;
 use std::env;
-use std::path::Path;
 use std::process::{self, Stdio};
 
 fn main() {
     let args = env::args().skip(1).collect::<Vec<String>>();
 
-    let parsed_args = match node_cli_parser::parse_args(args) {
+    let parsed_args = match node_shim::parse_args(args) {
         Ok(parsed_args) => parsed_args,
         Err(e) => {
             if e.len() == 1 {
