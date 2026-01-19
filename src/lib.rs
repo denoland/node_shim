@@ -2674,7 +2674,7 @@ impl OptionsParser {
             // Expand aliases
             let mut current_name = final_name.clone();
             let mut expansion_count = 0;
-            while expansion_count < 10 {
+            while expansion_count < 10 && current_name != "--" {
                 if let Some(alias_expansion) = self.aliases.get(&current_name) {
                     if !alias_expansion.is_empty() {
                         current_name = alias_expansion[0].clone();
