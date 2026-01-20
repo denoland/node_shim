@@ -1,10 +1,4 @@
-[package]
-name = "node_shim"
-version = "0.1.0"
-edition = "2024"
-license = "MIT"
-
 [workspace]
 resolver = "2"
-members = ["cli"]
-default-members = ["cli"]
+members = ["node_shim", "cli"]
+default-members = ["node_shim"]
