@@ -1,3 +1,5 @@
+// Copyright the Deno authors. MIT license.
+
 /*!
  * Node.js CLI Argument Parser - Rust Implementation
  *
@@ -59,19 +61,10 @@ impl HostPort {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct InspectPublishUid {
     pub console: bool,
     pub http: bool,
-}
-
-impl Default for InspectPublishUid {
-    fn default() -> Self {
-        Self {
-            console: false,
-            http: false,
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -182,7 +175,7 @@ pub struct EnvironmentOptions {
     pub force_node_api_uncaught_exceptions_policy: bool,
     pub frozen_intrinsics: bool,
     pub heap_snapshot_near_heap_limit: i64,
-    pub heap_snapshot_signal: String,
+    pub heapsnapshot_signal: String,
     pub network_family_autoselection: bool,
     pub network_family_autoselection_attempt_timeout: u64,
     pub max_http_header_size: u64,
@@ -319,7 +312,7 @@ impl Default for EnvironmentOptions {
             force_node_api_uncaught_exceptions_policy: false,
             frozen_intrinsics: false,
             heap_snapshot_near_heap_limit: 0,
-            heap_snapshot_signal: String::new(),
+            heapsnapshot_signal: String::new(),
             network_family_autoselection: true,
             network_family_autoselection_attempt_timeout: 250,
             max_http_header_size: 16 * 1024,
@@ -420,26 +413,26 @@ impl Default for EnvironmentOptions {
 
 impl EnvironmentOptions {
     pub fn check_options(&mut self, errors: &mut Vec<String>) {
-        if !self.input_type.is_empty() {
-            if !matches!(
+        if !self.input_type.is_empty()
+            && !matches!(
                 self.input_type.as_str(),
                 "commonjs" | "module" | "commonjs-typescript" | "module-typescript"
-            ) {
-                errors.push("--input-type must be \"module\", \"commonjs\", \"module-typescript\" or \"commonjs-typescript\"".to_string());
-            }
+            )
+        {
+            errors.push("--input-type must be \"module\", \"commonjs\", \"module-typescript\" or \"commonjs-typescript\"".to_string());
         }
 
         if self.syntax_check_only && self.has_eval_string {
             errors.push("either --check or --eval can be used, not both".to_string());
         }
 
-        if !self.unhandled_rejections.is_empty() {
-            if !matches!(
+        if !self.unhandled_rejections.is_empty()
+            && !matches!(
                 self.unhandled_rejections.as_str(),
                 "warn-with-error-code" | "throw" | "strict" | "warn" | "none"
-            ) {
-                errors.push("invalid value for --unhandled-rejections".to_string());
-            }
+            )
+        {
+            errors.push("invalid value for --unhandled-rejections".to_string());
         }
 
         if self.tls_min_v1_3 && self.tls_max_v1_2 {
@@ -451,13 +444,13 @@ impl EnvironmentOptions {
             errors.push("--heapsnapshot-near-heap-limit must not be negative".to_string());
         }
 
-        if !self.trace_require_module.is_empty() {
-            if !matches!(
+        if !self.trace_require_module.is_empty()
+            && !matches!(
                 self.trace_require_module.as_str(),
                 "all" | "no-node-modules"
-            ) {
-                errors.push("invalid value for --trace-require-module".to_string());
-            }
+            )
+        {
+            errors.push("invalid value for --trace-require-module".to_string());
         }
 
         if self.test_runner {
@@ -689,7 +682,7 @@ impl PerProcessOptions {
 }
 
 fn remove_brackets(host: &str) -> String {
-    if host.len() > 0 && host.starts_with('[') && host.ends_with(']') {
+    if !host.is_empty() && host.starts_with('[') && host.ends_with(']') {
         host[1..host.len() - 1].to_string()
     } else {
         host.to_string()
@@ -2504,7 +2497,7 @@ impl OptionsParser {
             "--diagnostic-dir" => options.per_isolate.per_env.diagnostic_dir = value,
             "--localstorage-file" => options.per_isolate.per_env.localstorage_file = value,
             "--input-type" => options.per_isolate.per_env.input_type = value,
-            "--heap-snapshot-signal" => options.per_isolate.per_env.heap_snapshot_signal = value,
+            "--heapsnapshot-signal" => options.per_isolate.per_env.heapsnapshot_signal = value,
             "--cpu-prof-name" => options.per_isolate.per_env.cpu_prof_name = value,
             "--cpu-prof-dir" => options.per_isolate.per_env.cpu_prof_dir = value,
             "--heap-prof-name" => options.per_isolate.per_env.heap_prof_name = value,
@@ -2661,19 +2654,30 @@ impl OptionsParser {
             }
 
             // Handle negation
-            let (is_negation, final_name) = if normalized_name.starts_with("--no-") {
-                (true, "--".to_string() + &normalized_name[5..])
-            } else {
-                (false, normalized_name)
-            };
+            let (is_negation, final_name) =
+                if let Some(stripped) = normalized_name.strip_prefix("--no-") {
+                    (true, "--".to_string() + stripped)
+                } else {
+                    (false, normalized_name)
+                };
 
             // Expand aliases
             let mut current_name = final_name.clone();
             let mut expansion_count = 0;
-            while expansion_count < 10 {
+            while expansion_count < 10 && current_name != "--" {
                 if let Some(alias_expansion) = self.aliases.get(&current_name) {
                     if !alias_expansion.is_empty() {
-                        current_name = alias_expansion[0].clone();
+                        let new_name = alias_expansion[0].clone();
+                        // Stop if alias expands to itself (e.g., --prof-process -> [--prof-process, --])
+                        if new_name == current_name {
+                            if alias_expansion.len() > 1 {
+                                for item in alias_expansion[1..].iter().rev() {
+                                    synthetic_args.insert(0, item.clone());
+                                }
+                            }
+                            break;
+                        }
+                        current_name = new_name;
                         if alias_expansion.len() > 1 {
                             for item in alias_expansion[1..].iter().rev() {
                                 synthetic_args.insert(0, item.clone());
@@ -2686,7 +2690,17 @@ impl OptionsParser {
                 } else if has_equals {
                     if let Some(alias_expansion) = self.aliases.get(&(current_name.clone() + "=")) {
                         if !alias_expansion.is_empty() {
-                            current_name = alias_expansion[0].clone();
+                            let new_name = alias_expansion[0].clone();
+                            // Stop if alias expands to itself
+                            if new_name == current_name {
+                                if alias_expansion.len() > 1 {
+                                    for item in alias_expansion[1..].iter().rev() {
+                                        synthetic_args.insert(0, item.clone());
+                                    }
+                                }
+                                break;
+                            }
+                            current_name = new_name;
                             if alias_expansion.len() > 1 {
                                 for item in alias_expansion[1..].iter().rev() {
                                     synthetic_args.insert(0, item.clone());
@@ -2714,12 +2728,12 @@ impl OptionsParser {
             if let Some(implications) = self.implications.get(&implied_name) {
                 for implication in implications {
                     if implication.starts_with("--") {
-                        if implication.starts_with("--no-") {
-                            let target_name = "--".to_string() + &implication[5..];
-                            if let Some(option_info) = self.options.get(&target_name) {
-                                if option_info.option_type == OptionType::Boolean {
-                                    self.set_boolean_field(&mut options, &target_name, false);
-                                }
+                        if let Some(stripped) = implication.strip_prefix("--no-") {
+                            let target_name = "--".to_string() + stripped;
+                            if let Some(option_info) = self.options.get(&target_name)
+                                && option_info.option_type == OptionType::Boolean
+                            {
+                                self.set_boolean_field(&mut options, &target_name, false);
                             }
                         } else {
                             // Check if it's a boolean option we handle
@@ -2735,10 +2749,10 @@ impl OptionsParser {
                         }
                     } else {
                         // Handle special implications like [has_eval_string]
-                        if let Some(option_info) = self.options.get(implication) {
-                            if option_info.option_type == OptionType::Boolean {
-                                self.set_boolean_field(&mut options, implication, true);
-                            }
+                        if let Some(option_info) = self.options.get(implication)
+                            && option_info.option_type == OptionType::Boolean
+                        {
+                            self.set_boolean_field(&mut options, implication, true);
                         }
                     }
                 }
@@ -2890,10 +2904,8 @@ pub fn parse_node_options_env_var(node_options: &str) -> Result<Vec<String>, Vec
         if will_start_new_arg {
             env_argv.push(c.to_string());
             will_start_new_arg = false;
-        } else {
-            if let Some(last) = env_argv.last_mut() {
-                last.push(c);
-            }
+        } else if let Some(last) = env_argv.last_mut() {
+            last.push(c);
         }
 
         index += 1;
@@ -3043,7 +3055,7 @@ mod tests {
         assert!(
             errors
                 .iter()
-                .any(|e| e.contains("either --test or --interactive can be used, not both"))
+                .any(|e| { e.contains("either --test or --interactive can be used, not both") })
         );
     }
 
@@ -3055,7 +3067,7 @@ mod tests {
         assert!(
             errors
                 .iter()
-                .any(|e| e.contains("--watch-path cannot be used in combination with --test"))
+                .any(|e| { e.contains("--watch-path cannot be used in combination with --test") })
         );
     }
 
@@ -3091,7 +3103,7 @@ mod tests {
         assert!(
             errors
                 .iter()
-                .any(|e| e.contains("either --watch or --interactive can be used, not both"))
+                .any(|e| { e.contains("either --watch or --interactive can be used, not both") })
         );
     }
 
@@ -3101,9 +3113,9 @@ mod tests {
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert!(
-            errors
-                .iter()
-                .any(|e| e.contains("either --watch or --test-force-exit can be used, not both"))
+            errors.iter().any(|e| {
+                e.contains("either --watch or --test-force-exit can be used, not both")
+            })
         );
     }
 
@@ -3197,7 +3209,7 @@ mod tests {
         assert!(
             errors
                 .iter()
-                .any(|e| e.contains("--heap-prof-interval must be used with --heap-prof"))
+                .any(|e| { e.contains("--heap-prof-interval must be used with --heap-prof") })
         );
     }
 
@@ -3265,7 +3277,7 @@ mod tests {
         assert!(
             errors
                 .iter()
-                .any(|e| e.contains("--heapsnapshot-near-heap-limit must not be negative"))
+                .any(|e| { e.contains("--heapsnapshot-near-heap-limit must not be negative") })
         );
     }
 
@@ -3317,7 +3329,7 @@ mod tests {
         assert!(
             errors
                 .iter()
-                .any(|e| e.contains("--inspect-publish-uid destination can be stderr or http"))
+                .any(|e| { e.contains("--inspect-publish-uid destination can be stderr or http") })
         );
     }
 
@@ -3339,9 +3351,9 @@ mod tests {
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert!(
-            errors
-                .iter()
-                .any(|e| e.contains("is an invalid negation because it is not a boolean option"))
+            errors.iter().any(|e| {
+                e.contains("is an invalid negation because it is not a boolean option")
+            })
         );
     }
 
@@ -3596,5 +3608,734 @@ mod tests {
         // Test that underscores get normalized to dashes
         let result = parse_args(svec!["--zero_fill_buffers"]).unwrap();
         assert!(result.options.zero_fill_all_buffers);
+    }
+
+    // ==================== Alias Expansion Tests ====================
+
+    #[test]
+    fn test_prof_process_alias_does_not_infinite_loop() {
+        // --prof-process should expand to ["--prof-process", "--"] but not recurse infinitely
+        let result = parse_args(svec!["--prof-process", "somefile.log"]).unwrap();
+        assert!(result.options.per_isolate.per_env.prof_process);
+        // The remaining args should contain somefile.log, not multiple "--"
+        assert_eq!(result.remaining_args, svec!["somefile.log"]);
+    }
+
+    #[test]
+    fn test_alias_short_c_to_check() {
+        let result = parse_args(svec!["-c", "script.js"]).unwrap();
+        assert!(result.options.per_isolate.per_env.syntax_check_only);
+    }
+
+    #[test]
+    fn test_alias_short_e_to_eval() {
+        let result = parse_args(svec!["-e", "console.log(1)"]).unwrap();
+        assert!(result.options.per_isolate.per_env.has_eval_string);
+        assert_eq!(
+            result.options.per_isolate.per_env.eval_string,
+            "console.log(1)"
+        );
+    }
+
+    #[test]
+    fn test_alias_short_p_to_print() {
+        // -p expands to --print which is a boolean flag
+        // The argument "42" becomes the script file, not the eval string
+        // To get eval string behavior, use -pe (--print --eval)
+        let result = parse_args(svec!["-p", "42"]).unwrap();
+        assert!(result.options.per_isolate.per_env.print_eval);
+        assert_eq!(result.remaining_args, svec!["42"]);
+    }
+
+    #[test]
+    fn test_alias_short_r_to_require() {
+        let result = parse_args(svec!["-r", "dotenv/config", "script.js"]).unwrap();
+        assert_eq!(
+            result.options.per_isolate.per_env.preload_cjs_modules,
+            svec!["dotenv/config"]
+        );
+    }
+
+    #[test]
+    fn test_alias_short_i_to_interactive() {
+        let result = parse_args(svec!["-i"]).unwrap();
+        assert!(result.options.per_isolate.per_env.force_repl);
+    }
+
+    #[test]
+    fn test_alias_short_h_to_help() {
+        let result = parse_args(svec!["-h"]).unwrap();
+        assert!(result.options.print_help);
+    }
+
+    #[test]
+    fn test_alias_loader_to_experimental_loader() {
+        let result = parse_args(svec!["--loader", "./my-loader.js", "script.js"]).unwrap();
+        assert_eq!(
+            result.options.per_isolate.per_env.userland_loaders,
+            svec!["./my-loader.js"]
+        );
+    }
+
+    #[test]
+    fn test_alias_conditions_short() {
+        let result = parse_args(svec!["-C", "development", "script.js"]).unwrap();
+        assert_eq!(
+            result.options.per_isolate.per_env.conditions,
+            svec!["development"]
+        );
+    }
+
+    // ==================== V8 Options Tests ====================
+
+    #[test]
+    fn test_v8_option_max_old_space_size() {
+        let result = parse_args(svec!["--max-old-space-size=4096", "script.js"]).unwrap();
+        assert!(
+            result
+                .v8_args
+                .contains(&"--max-old-space-size=4096".to_string())
+        );
+    }
+
+    #[test]
+    fn test_v8_option_max_semi_space_size() {
+        let result = parse_args(svec!["--max-semi-space-size=64", "script.js"]).unwrap();
+        assert!(
+            result
+                .v8_args
+                .contains(&"--max-semi-space-size=64".to_string())
+        );
+    }
+
+    #[test]
+    fn test_v8_option_expose_gc() {
+        let result = parse_args(svec!["--expose-gc", "script.js"]).unwrap();
+        assert!(result.v8_args.contains(&"--expose-gc".to_string()));
+    }
+
+    #[test]
+    fn test_multiple_v8_options() {
+        let result = parse_args(svec![
+            "--max-old-space-size=4096",
+            "--expose-gc",
+            "script.js"
+        ])
+        .unwrap();
+        assert!(
+            result
+                .v8_args
+                .contains(&"--max-old-space-size=4096".to_string())
+        );
+        assert!(result.v8_args.contains(&"--expose-gc".to_string()));
+    }
+
+    // ==================== Remaining Args / Script Parsing Tests ====================
+
+    #[test]
+    fn test_script_with_args() {
+        let result = parse_args(svec!["script.js", "arg1", "arg2", "--flag"]).unwrap();
+        assert_eq!(
+            result.remaining_args,
+            svec!["script.js", "arg1", "arg2", "--flag"]
+        );
+    }
+
+    #[test]
+    fn test_options_before_script() {
+        let result = parse_args(svec!["--no-warnings", "script.js", "--my-arg"]).unwrap();
+        assert!(!result.options.per_isolate.per_env.warnings);
+        assert_eq!(result.remaining_args, svec!["script.js", "--my-arg"]);
+    }
+
+    #[test]
+    fn test_double_dash_stops_option_parsing() {
+        let result = parse_args(svec!["--", "--version"]).unwrap();
+        // --version after -- should be treated as a script name, not an option
+        assert!(!result.options.print_version);
+        assert_eq!(result.remaining_args, svec!["--version"]);
+    }
+
+    #[test]
+    fn test_double_dash_with_script_and_args() {
+        let result = parse_args(svec!["--no-warnings", "--", "script.js", "--help"]).unwrap();
+        assert!(!result.options.per_isolate.per_env.warnings);
+        assert_eq!(result.remaining_args, svec!["script.js", "--help"]);
+    }
+
+    // ==================== --run, --eval, --test Options Tests ====================
+
+    #[test]
+    fn test_run_option() {
+        let result = parse_args(svec!["--run", "build"]).unwrap();
+        assert_eq!(result.options.run, "build");
+    }
+
+    #[test]
+    fn test_eval_option_with_code() {
+        let result = parse_args(svec!["--eval", "console.log('hello')"]).unwrap();
+        assert!(result.options.per_isolate.per_env.has_eval_string);
+        assert_eq!(
+            result.options.per_isolate.per_env.eval_string,
+            "console.log('hello')"
+        );
+    }
+
+    #[test]
+    fn test_print_eval_option() {
+        // --print is a boolean flag; use -pe for print+eval
+        let result = parse_args(svec!["-pe", "1 + 1"]).unwrap();
+        assert!(result.options.per_isolate.per_env.print_eval);
+        assert!(result.options.per_isolate.per_env.has_eval_string);
+        assert_eq!(result.options.per_isolate.per_env.eval_string, "1 + 1");
+    }
+
+    #[test]
+    fn test_test_runner_option() {
+        let result = parse_args(svec!["--test"]).unwrap();
+        assert!(result.options.per_isolate.per_env.test_runner);
+    }
+
+    #[test]
+    fn test_test_with_files() {
+        let result = parse_args(svec!["--test", "test/*.js"]).unwrap();
+        assert!(result.options.per_isolate.per_env.test_runner);
+        assert_eq!(result.remaining_args, svec!["test/*.js"]);
+    }
+
+    #[test]
+    fn test_test_timeout_option() {
+        let result = parse_args(svec!["--test", "--test-timeout", "5000"]).unwrap();
+        assert!(result.options.per_isolate.per_env.test_runner);
+        assert_eq!(result.options.per_isolate.per_env.test_runner_timeout, 5000);
+    }
+
+    #[test]
+    fn test_test_concurrency_option() {
+        let result = parse_args(svec!["--test", "--test-concurrency", "4"]).unwrap();
+        assert!(result.options.per_isolate.per_env.test_runner);
+        assert_eq!(
+            result.options.per_isolate.per_env.test_runner_concurrency,
+            4
+        );
+    }
+
+    #[test]
+    fn test_test_name_pattern_option() {
+        let result = parse_args(svec!["--test", "--test-name-pattern", "should.*work"]).unwrap();
+        assert!(result.options.per_isolate.per_env.test_runner);
+        assert_eq!(
+            result.options.per_isolate.per_env.test_name_pattern,
+            svec!["should.*work"]
+        );
+    }
+
+    #[test]
+    fn test_test_skip_pattern_option() {
+        let result = parse_args(svec!["--test", "--test-skip-pattern", "slow"]).unwrap();
+        assert!(result.options.per_isolate.per_env.test_runner);
+        assert_eq!(
+            result.options.per_isolate.per_env.test_skip_pattern,
+            svec!["slow"]
+        );
+    }
+
+    // ==================== String List Options Tests ====================
+
+    #[test]
+    fn test_multiple_conditions() {
+        let result = parse_args(svec![
+            "--conditions",
+            "development",
+            "--conditions",
+            "browser",
+            "script.js"
+        ])
+        .unwrap();
+        assert_eq!(
+            result.options.per_isolate.per_env.conditions,
+            svec!["development", "browser"]
+        );
+    }
+
+    #[test]
+    fn test_multiple_require() {
+        let result = parse_args(svec![
+            "--require",
+            "dotenv/config",
+            "--require",
+            "./setup.js",
+            "script.js"
+        ])
+        .unwrap();
+        assert_eq!(
+            result.options.per_isolate.per_env.preload_cjs_modules,
+            svec!["dotenv/config", "./setup.js"]
+        );
+    }
+
+    #[test]
+    fn test_import_option() {
+        let result = parse_args(svec!["--import", "./register.js", "script.js"]).unwrap();
+        assert_eq!(
+            result.options.per_isolate.per_env.preload_esm_modules,
+            svec!["./register.js"]
+        );
+    }
+
+    #[test]
+    fn test_multiple_import() {
+        let result = parse_args(svec![
+            "--import",
+            "./a.js",
+            "--import",
+            "./b.js",
+            "script.js"
+        ])
+        .unwrap();
+        assert_eq!(
+            result.options.per_isolate.per_env.preload_esm_modules,
+            svec!["./a.js", "./b.js"]
+        );
+    }
+
+    // ==================== Watch Mode Tests ====================
+
+    #[test]
+    fn test_watch_with_script() {
+        let result = parse_args(svec!["--watch", "script.js"]).unwrap();
+        assert!(result.options.per_isolate.per_env.watch_mode);
+        assert_eq!(result.remaining_args, svec!["script.js"]);
+    }
+
+    #[test]
+    fn test_watch_with_test() {
+        let result = parse_args(svec!["--test", "--watch"]).unwrap();
+        assert!(result.options.per_isolate.per_env.test_runner);
+        assert!(result.options.per_isolate.per_env.watch_mode);
+    }
+
+    #[test]
+    fn test_watch_path_option() {
+        let result = parse_args(svec!["--watch", "--watch-path", "./src", "script.js"]).unwrap();
+        assert!(result.options.per_isolate.per_env.watch_mode);
+        assert_eq!(
+            result.options.per_isolate.per_env.watch_mode_paths,
+            svec!["./src"]
+        );
+    }
+
+    #[test]
+    fn test_watch_preserve_output() {
+        let result = parse_args(svec!["--watch", "--watch-preserve-output", "script.js"]).unwrap();
+        assert!(result.options.per_isolate.per_env.watch_mode);
+        assert!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .watch_mode_preserve_output
+        );
+    }
+
+    // ==================== NODE_OPTIONS Edge Cases Tests ====================
+
+    #[test]
+    fn test_node_options_with_escaped_quotes() {
+        let env_args = parse_node_options_env_var("--title \"hello \\\"world\\\"\"").unwrap();
+        assert_eq!(env_args, vec!["--title", "hello \"world\""]);
+    }
+
+    #[test]
+    fn test_node_options_with_backslash() {
+        let env_args = parse_node_options_env_var("--title \"path\\\\to\\\\file\"").unwrap();
+        assert_eq!(env_args, vec!["--title", "path\\to\\file"]);
+    }
+
+    #[test]
+    fn test_node_options_multiple_spaces() {
+        let env_args = parse_node_options_env_var("--no-warnings   --no-deprecation").unwrap();
+        assert_eq!(env_args, vec!["--no-warnings", "--no-deprecation"]);
+    }
+
+    #[test]
+    fn test_node_options_unterminated_string_error() {
+        let result = parse_node_options_env_var("--title \"unterminated");
+        assert!(result.is_err());
+        let errors = result.unwrap_err();
+        assert!(errors.iter().any(|e| e.contains("unterminated string")));
+    }
+
+    #[test]
+    fn test_node_options_invalid_escape_error() {
+        let result = parse_node_options_env_var("--title \"test\\");
+        assert!(result.is_err());
+        let errors = result.unwrap_err();
+        assert!(errors.iter().any(|e| e.contains("invalid escape")));
+    }
+
+    #[test]
+    fn test_node_options_empty_string() {
+        let env_args = parse_node_options_env_var("").unwrap();
+        assert!(env_args.is_empty());
+    }
+
+    #[test]
+    fn test_node_options_only_spaces() {
+        let env_args = parse_node_options_env_var("   ").unwrap();
+        assert!(env_args.is_empty());
+    }
+
+    // ==================== Debug / Inspector Options Tests ====================
+
+    #[test]
+    fn test_inspect_brk_option() {
+        let result = parse_args(svec!["--inspect-brk"]).unwrap();
+        assert!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .inspector_enabled
+        );
+        assert!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .break_first_line
+        );
+    }
+
+    #[test]
+    fn test_inspect_wait_option() {
+        let result = parse_args(svec!["--inspect-wait"]).unwrap();
+        assert!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .inspector_enabled
+        );
+        assert!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .inspect_wait
+        );
+    }
+
+    #[test]
+    fn test_inspect_with_custom_port() {
+        let result = parse_args(svec!["--inspect=9230"]).unwrap();
+        assert!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .inspector_enabled
+        );
+        assert_eq!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .host_port
+                .port,
+            9230
+        );
+    }
+
+    #[test]
+    fn test_inspect_with_host_and_port() {
+        let result = parse_args(svec!["--inspect=0.0.0.0:9230"]).unwrap();
+        assert!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .inspector_enabled
+        );
+        assert_eq!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .host_port
+                .host,
+            "0.0.0.0"
+        );
+        assert_eq!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .host_port
+                .port,
+            9230
+        );
+    }
+
+    #[test]
+    fn test_inspect_port_zero() {
+        let result = parse_args(svec!["--inspect-port", "0"]).unwrap();
+        assert_eq!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .host_port
+                .port,
+            0
+        );
+    }
+
+    // ==================== Env File Options Tests ====================
+
+    #[test]
+    fn test_env_file_option() {
+        let result = parse_args(svec!["--env-file", ".env", "script.js"]).unwrap();
+        assert!(result.options.per_isolate.per_env.has_env_file_string);
+        assert_eq!(result.options.per_isolate.per_env.env_file, ".env");
+    }
+
+    #[test]
+    fn test_env_file_if_exists_option() {
+        let result = parse_args(svec!["--env-file-if-exists", ".env.local", "script.js"]).unwrap();
+        assert!(result.options.per_isolate.per_env.has_env_file_string);
+        assert_eq!(
+            result.options.per_isolate.per_env.optional_env_file,
+            ".env.local"
+        );
+    }
+
+    // ==================== Boolean Options Tests ====================
+
+    #[test]
+    fn test_no_deprecation() {
+        let result = parse_args(svec!["--no-deprecation"]).unwrap();
+        assert!(!result.options.per_isolate.per_env.deprecation);
+    }
+
+    #[test]
+    fn test_throw_deprecation() {
+        let result = parse_args(svec!["--throw-deprecation"]).unwrap();
+        assert!(result.options.per_isolate.per_env.throw_deprecation);
+    }
+
+    #[test]
+    fn test_trace_deprecation() {
+        let result = parse_args(svec!["--trace-deprecation"]).unwrap();
+        assert!(result.options.per_isolate.per_env.trace_deprecation);
+    }
+
+    #[test]
+    fn test_pending_deprecation() {
+        let result = parse_args(svec!["--pending-deprecation"]).unwrap();
+        assert!(result.options.per_isolate.per_env.pending_deprecation);
+    }
+
+    #[test]
+    fn test_preserve_symlinks() {
+        let result = parse_args(svec!["--preserve-symlinks"]).unwrap();
+        assert!(result.options.per_isolate.per_env.preserve_symlinks);
+    }
+
+    #[test]
+    fn test_preserve_symlinks_main() {
+        let result = parse_args(svec!["--preserve-symlinks-main"]).unwrap();
+        assert!(result.options.per_isolate.per_env.preserve_symlinks_main);
+    }
+
+    #[test]
+    fn test_no_extra_info_on_fatal_exception() {
+        let result = parse_args(svec!["--no-extra-info-on-fatal-exception"]).unwrap();
+        assert!(
+            !result
+                .options
+                .per_isolate
+                .per_env
+                .extra_info_on_fatal_exception
+        );
+    }
+
+    #[test]
+    fn test_enable_source_maps() {
+        let result = parse_args(svec!["--enable-source-maps"]).unwrap();
+        assert!(result.options.per_isolate.per_env.enable_source_maps);
+    }
+
+    #[test]
+    fn test_experimental_strip_types() {
+        let result = parse_args(svec!["--experimental-strip-types"]).unwrap();
+        assert!(result.options.per_isolate.per_env.experimental_strip_types);
+    }
+
+    // ==================== Equals Syntax Tests ====================
+
+    #[test]
+    fn test_option_with_equals() {
+        let result = parse_args(svec!["--title=myapp"]).unwrap();
+        assert_eq!(result.options.title, "myapp");
+    }
+
+    #[test]
+    fn test_option_with_equals_and_spaces_in_value() {
+        // Value with spaces requires quoting at shell level, but once parsed it works
+        let result = parse_args(svec!["--title=my app"]).unwrap();
+        assert_eq!(result.options.title, "my app");
+    }
+
+    #[test]
+    fn test_boolean_option_positive() {
+        // Boolean options are set to true by using them directly
+        let result = parse_args(svec!["--warnings"]).unwrap();
+        assert!(result.options.per_isolate.per_env.warnings);
+    }
+
+    #[test]
+    fn test_boolean_option_negative() {
+        // Boolean options are set to false using --no- prefix
+        let result = parse_args(svec!["--no-warnings"]).unwrap();
+        assert!(!result.options.per_isolate.per_env.warnings);
+    }
+
+    #[test]
+    fn test_boolean_option_double_negation() {
+        // --no-deprecation disables deprecation warnings
+        let result = parse_args(svec!["--no-deprecation"]).unwrap();
+        assert!(!result.options.per_isolate.per_env.deprecation);
+    }
+
+    // ==================== Unknown Option Tests ====================
+
+    #[test]
+    fn test_unknown_option_passed_to_v8() {
+        // Unknown options are passed through as V8 args, not treated as errors
+        let result =
+            parse_args(svec!["--unknown-option-that-does-not-exist", "script.js"]).unwrap();
+        assert!(
+            result
+                .v8_args
+                .contains(&"--unknown-option-that-does-not-exist".to_string())
+        );
+    }
+
+    // ==================== Integer Option Tests ====================
+
+    #[test]
+    fn test_stack_trace_limit() {
+        let result = parse_args(svec!["--stack-trace-limit", "50"]).unwrap();
+        assert_eq!(result.options.per_isolate.stack_trace_limit, 50);
+    }
+
+    #[test]
+    fn test_v8_pool_size() {
+        let result = parse_args(svec!["--v8-pool-size", "8"]).unwrap();
+        assert_eq!(result.options.v8_thread_pool_size, 8);
+    }
+
+    // ==================== Complex Scenarios Tests ====================
+
+    #[test]
+    fn test_combined_options_for_debugging() {
+        let result = parse_args(svec![
+            "--inspect-brk=9230",
+            "--no-warnings",
+            "--enable-source-maps",
+            "script.js",
+            "--arg1"
+        ])
+        .unwrap();
+        assert!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .inspector_enabled
+        );
+        assert!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .break_first_line
+        );
+        assert_eq!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .host_port
+                .port,
+            9230
+        );
+        assert!(!result.options.per_isolate.per_env.warnings);
+        assert!(result.options.per_isolate.per_env.enable_source_maps);
+        assert_eq!(result.remaining_args, svec!["script.js", "--arg1"]);
+    }
+
+    #[test]
+    fn test_combined_options_for_testing() {
+        let result = parse_args(svec![
+            "--test",
+            "--test-timeout",
+            "10000",
+            "--test-concurrency",
+            "2",
+            "--test-reporter",
+            "spec",
+            "test/**/*.test.js"
+        ])
+        .unwrap();
+        assert!(result.options.per_isolate.per_env.test_runner);
+        assert_eq!(
+            result.options.per_isolate.per_env.test_runner_timeout,
+            10000
+        );
+        assert_eq!(
+            result.options.per_isolate.per_env.test_runner_concurrency,
+            2
+        );
+        assert_eq!(
+            result.options.per_isolate.per_env.test_reporter,
+            svec!["spec"]
+        );
+        assert_eq!(result.remaining_args, svec!["test/**/*.test.js"]);
+    }
+
+    #[test]
+    fn test_combined_options_for_esm_loader() {
+        let result = parse_args(svec![
+            "--import",
+            "./register.js",
+            "--conditions",
+            "development",
+            "script.js"
+        ])
+        .unwrap();
+        assert_eq!(
+            result.options.per_isolate.per_env.preload_esm_modules,
+            svec!["./register.js"]
+        );
+        assert_eq!(
+            result.options.per_isolate.per_env.conditions,
+            svec!["development"]
+        );
+        assert_eq!(result.remaining_args, svec!["script.js"]);
     }
 }
