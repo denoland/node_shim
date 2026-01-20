@@ -4,3 +4,6 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT"
 description = "A crate that maps Node.js CLI arguments into Deno arguments."
+
+[dependencies]
+serde_json = "1"

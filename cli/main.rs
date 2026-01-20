@@ -1,7 +1,7 @@
 // Copyright the Deno authors. MIT license.
 
 use exec::execvp;
-use node_shim::ParseResult;
+use node_shim::{TranslateOptions, translate_to_deno_args};
 use std::env;
 use std::process::{self, Stdio};
 
@@ -20,7 +20,40 @@ fn main() {
         }
     };
 
-    let deno_args = translate_to_deno(parsed_args);
+    // Handle --help specially for CLI
+    if parsed_args.options.print_help {
+        println!("This is a shim that translates Node CLI arguments to Deno CLI arguments.");
+        println!("Use exactly like you would use Node.js, but it will run with Deno.");
+        process::exit(0);
+    }
+
+    let options = TranslateOptions::for_node_cli();
+    let result = translate_to_deno_args(parsed_args, &options);
+
+    // Set DENO_TLS_CA_STORE if needed
+    if result.use_system_ca {
+        unsafe { std::env::set_var("DENO_TLS_CA_STORE", "system") };
+    }
+
+    let mut deno_args = result.deno_args;
+
+    // Handle entrypoint resolution for run commands
+    if deno_args.len() >= 3 && deno_args.get(1) == Some(&"run".to_string()) {
+        // Find the entrypoint (first non-flag arg after "run")
+        let mut entrypoint_idx = None;
+        for (i, arg) in deno_args.iter().enumerate().skip(2) {
+            if !arg.starts_with('-') && !arg.starts_with("--") {
+                entrypoint_idx = Some(i);
+                break;
+            }
+        }
+
+        if let Some(idx) = entrypoint_idx {
+            let entrypoint = &deno_args[idx];
+            let resolved = resolve_entrypoint(entrypoint);
+            deno_args[idx] = resolved;
+        }
+    }
 
     if std::env::var("NODE_SHIM_DEBUG").is_ok() {
         eprintln!("deno {:?}", deno_args);
@@ -31,334 +64,6 @@ fn main() {
     let err = execvp("deno", &deno_args);
     eprintln!("Failed to execute deno: {}", err);
     process::exit(1);
-}
-
-fn translate_to_deno(parsed_args: ParseResult) -> Vec<String> {
-    let mut deno_args = vec!["node".to_string()];
-
-    if parsed_args.options.use_system_ca || parsed_args.options.use_openssl_ca {
-        unsafe { std::env::set_var("DENO_TLS_CA_STORE", "system") };
-    }
-
-    if parsed_args.options.print_help {
-        println!("This is a shim that translates Node CLI arguments to Deno CLI arguments.");
-        println!("Use exactly like you would use Node.js, but it will run with Deno.");
-        process::exit(0);
-    }
-
-    if parsed_args.options.print_version {
-        deno_args.push("--version".to_string());
-        return deno_args;
-    }
-
-    if parsed_args.options.print_v8_help {
-        deno_args.push("run".to_string());
-        deno_args.push("--v8-flags=--help".to_string());
-        return deno_args;
-    }
-
-    // Handle --run (package.json scripts)
-    if !parsed_args.options.run.is_empty() {
-        deno_args.push("task".to_string());
-        deno_args.push(parsed_args.options.run.clone());
-        deno_args.extend(parsed_args.remaining_args);
-        return deno_args;
-    }
-
-    // Handle -e/--eval or -p/--print
-    if parsed_args.options.per_isolate.per_env.has_eval_string {
-        deno_args.push("eval".to_string());
-        deno_args.push("-A".to_string()); // Allow all permissions
-        deno_args.push("--unstable-node-globals".to_string());
-        deno_args.push("--unstable-bare-node-builtins".to_string());
-        deno_args.push("--unstable-detect-cjs".to_string());
-        deno_args.push("--node-modules-dir=manual".to_string());
-        deno_args.push("--no-config".to_string());
-        if parsed_args.options.per_isolate.per_env.has_env_file_string {
-            if parsed_args.options.per_isolate.per_env.env_file.is_empty() {
-                deno_args.push("--env-file".to_string());
-            } else {
-                deno_args.push(format!(
-                    "--env-file={}",
-                    parsed_args.options.per_isolate.per_env.env_file
-                ));
-            }
-        }
-        if parsed_args.options.per_isolate.per_env.print_eval {
-            deno_args.push("--print".to_string());
-        }
-        if !parsed_args.v8_args.is_empty() {
-            deno_args.push(format!("--v8-flags={}", parsed_args.v8_args.join(",")));
-        }
-        deno_args.push(parsed_args.options.per_isolate.per_env.eval_string);
-        deno_args.push("--".to_string());
-        deno_args.extend(parsed_args.remaining_args);
-        return deno_args;
-    }
-
-    // Handle REPL (no arguments or only node options)
-    if parsed_args.remaining_args.is_empty() || parsed_args.options.per_isolate.per_env.force_repl {
-        deno_args.push("repl".to_string());
-        deno_args.push("-A".to_string());
-        if !parsed_args.v8_args.is_empty() {
-            deno_args.push(format!("--v8-flags={}", parsed_args.v8_args.join(",")));
-        }
-        if !parsed_args
-            .options
-            .per_isolate
-            .per_env
-            .conditions
-            .is_empty()
-        {
-            deno_args.push(format!(
-                "--conditions={}",
-                parsed_args.options.per_isolate.per_env.conditions.join(",")
-            ));
-        }
-        if parsed_args
-            .options
-            .per_isolate
-            .per_env
-            .debug_options
-            .inspector_enabled
-        {
-            let arg = if parsed_args
-                .options
-                .per_isolate
-                .per_env
-                .debug_options
-                .break_first_line
-            {
-                "--inspect-brk"
-            } else {
-                "--inspect"
-            };
-            deno_args.push(format!(
-                "{}={}:{}",
-                arg,
-                parsed_args
-                    .options
-                    .per_isolate
-                    .per_env
-                    .debug_options
-                    .host_port
-                    .host,
-                parsed_args
-                    .options
-                    .per_isolate
-                    .per_env
-                    .debug_options
-                    .host_port
-                    .port
-            ));
-        }
-        deno_args.push("--".to_string());
-        deno_args.extend(parsed_args.remaining_args);
-        return deno_args;
-    }
-
-    if parsed_args.options.per_isolate.per_env.test_runner {
-        deno_args.push("test".to_string());
-        deno_args.push("-A".to_string()); // Allow all permissions for test runner
-        deno_args.push("--unstable-node-globals".to_string());
-        deno_args.push("--unstable-bare-node-builtins".to_string());
-        deno_args.push("--unstable-detect-cjs".to_string());
-        deno_args.push("--node-modules-dir=manual".to_string());
-        deno_args.push("--no-config".to_string());
-        if parsed_args.options.per_isolate.per_env.watch_mode {
-            if parsed_args
-                .options
-                .per_isolate
-                .per_env
-                .watch_mode_paths
-                .is_empty()
-            {
-                deno_args.push("--watch".to_string());
-            } else {
-                deno_args.push(format!(
-                    "--watch={}",
-                    parsed_args
-                        .options
-                        .per_isolate
-                        .per_env
-                        .watch_mode_paths
-                        .iter()
-                        .map(|p| p.replace(",", ",,"))
-                        .collect::<Vec<String>>()
-                        .join(",")
-                ));
-            }
-        }
-        if parsed_args.options.per_isolate.per_env.has_env_file_string {
-            if parsed_args.options.per_isolate.per_env.env_file.is_empty() {
-                deno_args.push("--env-file".to_string());
-            } else {
-                deno_args.push(format!(
-                    "--env-file={}",
-                    parsed_args.options.per_isolate.per_env.env_file
-                ));
-            }
-        }
-        if !parsed_args.v8_args.is_empty() {
-            deno_args.push(format!("--v8-flags={}", parsed_args.v8_args.join(",")));
-        }
-        if !parsed_args
-            .options
-            .per_isolate
-            .per_env
-            .conditions
-            .is_empty()
-        {
-            deno_args.push(format!(
-                "--conditions={}",
-                parsed_args.options.per_isolate.per_env.conditions.join(",")
-            ));
-        }
-        if parsed_args
-            .options
-            .per_isolate
-            .per_env
-            .debug_options
-            .inspector_enabled
-        {
-            let arg = if parsed_args
-                .options
-                .per_isolate
-                .per_env
-                .debug_options
-                .break_first_line
-            {
-                "--inspect-brk"
-            } else {
-                "--inspect"
-            };
-            deno_args.push(format!(
-                "{}={}:{}",
-                arg,
-                parsed_args
-                    .options
-                    .per_isolate
-                    .per_env
-                    .debug_options
-                    .host_port
-                    .host,
-                parsed_args
-                    .options
-                    .per_isolate
-                    .per_env
-                    .debug_options
-                    .host_port
-                    .port
-            ));
-        }
-        deno_args.extend(parsed_args.remaining_args);
-        return deno_args;
-    }
-
-    // Handle other cases, like running a script
-    deno_args.push("run".to_string());
-    deno_args.push("-A".to_string());
-    deno_args.push("--unstable-node-globals".to_string());
-    deno_args.push("--unstable-bare-node-builtins".to_string());
-    deno_args.push("--unstable-detect-cjs".to_string());
-    deno_args.push("--node-modules-dir=manual".to_string());
-    deno_args.push("--no-config".to_string());
-    if parsed_args.options.per_isolate.per_env.watch_mode {
-        if parsed_args
-            .options
-            .per_isolate
-            .per_env
-            .watch_mode_paths
-            .is_empty()
-        {
-            deno_args.push("--watch".to_string());
-        } else {
-            deno_args.push(format!(
-                "--watch={}",
-                parsed_args
-                    .options
-                    .per_isolate
-                    .per_env
-                    .watch_mode_paths
-                    .iter()
-                    .map(|p| p.replace(",", ",,"))
-                    .collect::<Vec<String>>()
-                    .join(",")
-            ));
-        }
-    }
-    if parsed_args.options.per_isolate.per_env.has_env_file_string {
-        if parsed_args.options.per_isolate.per_env.env_file.is_empty() {
-            deno_args.push("--env-file".to_string());
-        } else {
-            deno_args.push(format!(
-                "--env-file={}",
-                parsed_args.options.per_isolate.per_env.env_file
-            ));
-        }
-    }
-    if !parsed_args.v8_args.is_empty() {
-        deno_args.push(format!("--v8-flags={}", parsed_args.v8_args.join(",")));
-    }
-    if !parsed_args
-        .options
-        .per_isolate
-        .per_env
-        .conditions
-        .is_empty()
-    {
-        deno_args.push(format!(
-            "--conditions={}",
-            parsed_args.options.per_isolate.per_env.conditions.join(",")
-        ));
-    }
-    if parsed_args
-        .options
-        .per_isolate
-        .per_env
-        .debug_options
-        .inspector_enabled
-    {
-        let arg = if parsed_args
-            .options
-            .per_isolate
-            .per_env
-            .debug_options
-            .break_first_line
-        {
-            "--inspect-brk"
-        } else {
-            "--inspect"
-        };
-        deno_args.push(format!(
-            "{}={}:{}",
-            arg,
-            parsed_args
-                .options
-                .per_isolate
-                .per_env
-                .debug_options
-                .host_port
-                .host,
-            parsed_args
-                .options
-                .per_isolate
-                .per_env
-                .debug_options
-                .host_port
-                .port
-        ));
-    }
-    if parsed_args.remaining_args.is_empty() {
-        eprintln!("Error: No entrypoint provided. Please specify a script to run.");
-        process::exit(1);
-    }
-    let entrypoint = parsed_args.remaining_args[0].as_str();
-    let resolved_entrypoint = resolve_entrypoint(entrypoint);
-    deno_args.push(resolved_entrypoint);
-    deno_args.extend_from_slice(&parsed_args.remaining_args[1..]);
-
-    deno_args
 }
 
 fn resolve_entrypoint(entrypoint: &str) -> String {
@@ -390,12 +95,13 @@ fn resolve_entrypoint(entrypoint: &str) -> String {
         .expect("Failed to parse deno resolve output")
         .trim()
         .to_string();
-    return resolved_path;
+    resolved_path
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use node_shim::parse_args;
 
     /// Macro to create a Vec<String> from string literals
     macro_rules! svec {
@@ -409,9 +115,10 @@ mod tests {
         ($name:ident, $input:tt , $expected:tt) => {
             #[test]
             fn $name() {
-                let parsed_args = node_shim::parse_args(svec! $input).unwrap();
-                let result = translate_to_deno(parsed_args);
-                assert_eq!(result, svec! $expected);
+                let parsed_args = parse_args(svec! $input).unwrap();
+                let options = TranslateOptions::for_node_cli();
+                let result = translate_to_deno_args(parsed_args, &options);
+                assert_eq!(result.deno_args, svec! $expected);
             }
         };
     }
