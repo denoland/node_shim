@@ -2975,7 +2975,10 @@ pub fn wrap_eval_code(source_code: &str) -> String {
     // Use serde_json to properly escape the source code
     let json_escaped = serde_json::to_string(source_code).unwrap_or_else(|_| {
         // Fallback: basic escaping
-        format!("\"{}\"", source_code.replace('\\', "\\\\").replace('"', "\\\""))
+        format!(
+            "\"{}\"",
+            source_code.replace('\\', "\\\\").replace('"', "\\\"")
+        )
     });
 
     format!(
@@ -2989,11 +2992,59 @@ pub fn wrap_eval_code(source_code: &str) -> String {
     )
 }
 
+/// Deno subcommands - if the first arg is one of these, pass through unchanged
+const DENO_SUBCOMMANDS: &[&str] = &[
+    "add",
+    "bench",
+    "cache",
+    "check",
+    "compile",
+    "completions",
+    "coverage",
+    "doc",
+    "eval",
+    "fmt",
+    "help",
+    "info",
+    "init",
+    "install",
+    "lint",
+    "lsp",
+    "publish",
+    "repl",
+    "run",
+    "task",
+    "tasks",
+    "test",
+    "types",
+    "uninstall",
+    "upgrade",
+    "vendor",
+];
+
+/// Check if a string is a Deno subcommand
+pub fn is_deno_subcommand(arg: &str) -> bool {
+    DENO_SUBCOMMANDS.contains(&arg)
+}
+
 /// Translate parsed Node.js CLI arguments to Deno CLI arguments.
-pub fn translate_to_deno_args(parsed_args: ParseResult, options: &TranslateOptions) -> TranslatedArgs {
+pub fn translate_to_deno_args(
+    parsed_args: ParseResult,
+    options: &TranslateOptions,
+) -> TranslatedArgs {
     let mut result = TranslatedArgs::default();
     let deno_args = &mut result.deno_args;
     let node_options = &mut result.node_options;
+
+    // Check if the args already look like Deno args (e.g., from vitest workers)
+    // If the first remaining arg is a Deno subcommand, pass through unchanged
+    if let Some(first_arg) = parsed_args.remaining_args.first()
+        && is_deno_subcommand(first_arg)
+    {
+        // Already Deno-style args, return unchanged
+        result.deno_args = parsed_args.remaining_args;
+        return result;
+    }
 
     let opts = &parsed_args.options;
     let env_opts = &opts.per_isolate.per_env;
@@ -3052,7 +3103,10 @@ pub fn translate_to_deno_args(parsed_args: ParseResult, options: &TranslateOptio
 
     // Handle -e/--eval or -p/--print
     // Note: -p/--print alone (without -e) uses the first remaining arg as eval code
-    let eval_string_for_print = if !env_opts.has_eval_string && env_opts.print_eval && !parsed_args.remaining_args.is_empty() {
+    let eval_string_for_print = if !env_opts.has_eval_string
+        && env_opts.print_eval
+        && !parsed_args.remaining_args.is_empty()
+    {
         Some(parsed_args.remaining_args[0].clone())
     } else {
         None
@@ -3094,7 +3148,9 @@ pub fn translate_to_deno_args(parsed_args: ParseResult, options: &TranslateOptio
         add_inspector_flags(deno_args, env_opts);
 
         // Get the eval code from either the explicit eval_string or the first remaining arg (for -p)
-        let raw_eval_code = eval_string_for_print.as_ref().unwrap_or(&env_opts.eval_string);
+        let raw_eval_code = eval_string_for_print
+            .as_ref()
+            .unwrap_or(&env_opts.eval_string);
         let eval_code = if options.wrap_eval_code {
             wrap_eval_code(raw_eval_code)
         } else {
@@ -3195,7 +3251,11 @@ pub fn translate_to_deno_args(parsed_args: ParseResult, options: &TranslateOptio
     result
 }
 
-fn add_common_flags(deno_args: &mut Vec<String>, parsed_args: &ParseResult, env_opts: &EnvironmentOptions) {
+fn add_common_flags(
+    deno_args: &mut Vec<String>,
+    parsed_args: &ParseResult,
+    env_opts: &EnvironmentOptions,
+) {
     // Add watch mode if enabled
     if env_opts.watch_mode {
         if env_opts.watch_mode_paths.is_empty() {
@@ -3253,9 +3313,7 @@ fn add_inspector_flags(deno_args: &mut Vec<String>, env_opts: &EnvironmentOption
         };
         deno_args.push(format!(
             "{}={}:{}",
-            arg,
-            env_opts.debug_options.host_port.host,
-            env_opts.debug_options.host_port.port
+            arg, env_opts.debug_options.host_port.host, env_opts.debug_options.host_port.port
         ));
     }
 }
