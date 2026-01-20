@@ -95,24 +95,20 @@ impl Default for DebugOptions {
 }
 
 impl DebugOptions {
-    #[allow(dead_code)]
     pub fn enable_break_first_line(&mut self) {
         self.inspector_enabled = true;
         self.break_first_line = true;
     }
 
-    #[allow(dead_code)]
     pub fn disable_wait_or_break_first_line(&mut self) {
         self.inspect_wait = false;
         self.break_first_line = false;
     }
 
-    #[allow(dead_code)]
     pub fn wait_for_connect(&self) -> bool {
         self.break_first_line || self.break_node_first_line || self.inspect_wait
     }
 
-    #[allow(dead_code)]
     pub fn should_break_first_line(&self) -> bool {
         self.break_first_line || self.break_node_first_line
     }
@@ -140,7 +136,6 @@ impl DebugOptions {
 
 #[derive(Debug, Clone)]
 pub struct EnvironmentOptions {
-    #[allow(dead_code)]
     pub abort_on_uncaught_exception: bool,
     pub conditions: Vec<String>,
     pub detect_module: bool,
@@ -151,7 +146,6 @@ pub struct EnvironmentOptions {
     pub enable_source_maps: bool,
     pub experimental_addon_modules: bool,
     pub experimental_eventsource: bool,
-    #[allow(dead_code)]
     pub experimental_fetch: bool,
     pub experimental_websocket: bool,
     pub experimental_sqlite: bool,
@@ -159,7 +153,6 @@ pub struct EnvironmentOptions {
     pub experimental_quic: bool,
     pub localstorage_file: String,
     pub experimental_global_navigator: bool,
-    #[allow(dead_code)]
     pub experimental_global_web_crypto: bool,
     pub experimental_wasm_modules: bool,
     pub experimental_import_meta_resolve: bool,
@@ -248,7 +241,6 @@ pub struct EnvironmentOptions {
     pub userland_loaders: Vec<String>,
     pub verify_base_objects: bool,
     pub watch_mode: bool,
-    #[allow(dead_code)]
     pub watch_mode_report_to_parent: bool,
     pub watch_mode_preserve_output: bool,
     pub watch_mode_kill_signal: String,
@@ -270,7 +262,6 @@ pub struct EnvironmentOptions {
     pub preload_esm_modules: Vec<String>,
     pub experimental_strip_types: bool,
     pub experimental_transform_types: bool,
-    #[allow(dead_code)]
     pub user_argv: Vec<String>,
     pub report_exclude_env: bool,
     pub report_exclude_network: bool,
@@ -736,11 +727,8 @@ fn split_host_port(arg: &str, errors: &mut Vec<String>) -> HostPort {
 #[derive(Debug, Clone)]
 struct OptionInfo {
     option_type: OptionType,
-    #[allow(dead_code)]
     env_setting: OptionEnvvarSettings,
-    #[allow(dead_code)]
     help_text: String,
-    #[allow(dead_code)]
     default_is_true: bool,
 }
 
@@ -3641,7 +3629,10 @@ mod tests {
     fn test_alias_short_e_to_eval() {
         let result = parse_args(svec!["-e", "console.log(1)"]).unwrap();
         assert!(result.options.per_isolate.per_env.has_eval_string);
-        assert_eq!(result.options.per_isolate.per_env.eval_string, "console.log(1)");
+        assert_eq!(
+            result.options.per_isolate.per_env.eval_string,
+            "console.log(1)"
+        );
     }
 
     #[test]
@@ -3657,7 +3648,10 @@ mod tests {
     #[test]
     fn test_alias_short_r_to_require() {
         let result = parse_args(svec!["-r", "dotenv/config", "script.js"]).unwrap();
-        assert_eq!(result.options.per_isolate.per_env.preload_cjs_modules, svec!["dotenv/config"]);
+        assert_eq!(
+            result.options.per_isolate.per_env.preload_cjs_modules,
+            svec!["dotenv/config"]
+        );
     }
 
     #[test]
@@ -3684,7 +3678,10 @@ mod tests {
     #[test]
     fn test_alias_conditions_short() {
         let result = parse_args(svec!["-C", "development", "script.js"]).unwrap();
-        assert_eq!(result.options.per_isolate.per_env.conditions, svec!["development"]);
+        assert_eq!(
+            result.options.per_isolate.per_env.conditions,
+            svec!["development"]
+        );
     }
 
     // ==================== V8 Options Tests ====================
@@ -3692,13 +3689,21 @@ mod tests {
     #[test]
     fn test_v8_option_max_old_space_size() {
         let result = parse_args(svec!["--max-old-space-size=4096", "script.js"]).unwrap();
-        assert!(result.v8_args.contains(&"--max-old-space-size=4096".to_string()));
+        assert!(
+            result
+                .v8_args
+                .contains(&"--max-old-space-size=4096".to_string())
+        );
     }
 
     #[test]
     fn test_v8_option_max_semi_space_size() {
         let result = parse_args(svec!["--max-semi-space-size=64", "script.js"]).unwrap();
-        assert!(result.v8_args.contains(&"--max-semi-space-size=64".to_string()));
+        assert!(
+            result
+                .v8_args
+                .contains(&"--max-semi-space-size=64".to_string())
+        );
     }
 
     #[test]
@@ -3715,7 +3720,11 @@ mod tests {
             "script.js"
         ])
         .unwrap();
-        assert!(result.v8_args.contains(&"--max-old-space-size=4096".to_string()));
+        assert!(
+            result
+                .v8_args
+                .contains(&"--max-old-space-size=4096".to_string())
+        );
         assert!(result.v8_args.contains(&"--expose-gc".to_string()));
     }
 
@@ -3724,7 +3733,10 @@ mod tests {
     #[test]
     fn test_script_with_args() {
         let result = parse_args(svec!["script.js", "arg1", "arg2", "--flag"]).unwrap();
-        assert_eq!(result.remaining_args, svec!["script.js", "arg1", "arg2", "--flag"]);
+        assert_eq!(
+            result.remaining_args,
+            svec!["script.js", "arg1", "arg2", "--flag"]
+        );
     }
 
     #[test]
@@ -3761,7 +3773,10 @@ mod tests {
     fn test_eval_option_with_code() {
         let result = parse_args(svec!["--eval", "console.log('hello')"]).unwrap();
         assert!(result.options.per_isolate.per_env.has_eval_string);
-        assert_eq!(result.options.per_isolate.per_env.eval_string, "console.log('hello')");
+        assert_eq!(
+            result.options.per_isolate.per_env.eval_string,
+            "console.log('hello')"
+        );
     }
 
     #[test]
@@ -3797,7 +3812,10 @@ mod tests {
     fn test_test_concurrency_option() {
         let result = parse_args(svec!["--test", "--test-concurrency", "4"]).unwrap();
         assert!(result.options.per_isolate.per_env.test_runner);
-        assert_eq!(result.options.per_isolate.per_env.test_runner_concurrency, 4);
+        assert_eq!(
+            result.options.per_isolate.per_env.test_runner_concurrency,
+            4
+        );
     }
 
     #[test]
@@ -3814,7 +3832,10 @@ mod tests {
     fn test_test_skip_pattern_option() {
         let result = parse_args(svec!["--test", "--test-skip-pattern", "slow"]).unwrap();
         assert!(result.options.per_isolate.per_env.test_runner);
-        assert_eq!(result.options.per_isolate.per_env.test_skip_pattern, svec!["slow"]);
+        assert_eq!(
+            result.options.per_isolate.per_env.test_skip_pattern,
+            svec!["slow"]
+        );
     }
 
     // ==================== String List Options Tests ====================
@@ -3906,7 +3927,13 @@ mod tests {
     fn test_watch_preserve_output() {
         let result = parse_args(svec!["--watch", "--watch-preserve-output", "script.js"]).unwrap();
         assert!(result.options.per_isolate.per_env.watch_mode);
-        assert!(result.options.per_isolate.per_env.watch_mode_preserve_output);
+        assert!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .watch_mode_preserve_output
+        );
     }
 
     // ==================== NODE_OPTIONS Edge Cases Tests ====================
@@ -3962,39 +3989,114 @@ mod tests {
     #[test]
     fn test_inspect_brk_option() {
         let result = parse_args(svec!["--inspect-brk"]).unwrap();
-        assert!(result.options.per_isolate.per_env.debug_options.inspector_enabled);
-        assert!(result.options.per_isolate.per_env.debug_options.break_first_line);
+        assert!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .inspector_enabled
+        );
+        assert!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .break_first_line
+        );
     }
 
     #[test]
     fn test_inspect_wait_option() {
         let result = parse_args(svec!["--inspect-wait"]).unwrap();
-        assert!(result.options.per_isolate.per_env.debug_options.inspector_enabled);
-        assert!(result.options.per_isolate.per_env.debug_options.inspect_wait);
+        assert!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .inspector_enabled
+        );
+        assert!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .inspect_wait
+        );
     }
 
     #[test]
     fn test_inspect_with_custom_port() {
         let result = parse_args(svec!["--inspect=9230"]).unwrap();
-        assert!(result.options.per_isolate.per_env.debug_options.inspector_enabled);
-        assert_eq!(result.options.per_isolate.per_env.debug_options.host_port.port, 9230);
+        assert!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .inspector_enabled
+        );
+        assert_eq!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .host_port
+                .port,
+            9230
+        );
     }
 
     #[test]
     fn test_inspect_with_host_and_port() {
         let result = parse_args(svec!["--inspect=0.0.0.0:9230"]).unwrap();
-        assert!(result.options.per_isolate.per_env.debug_options.inspector_enabled);
+        assert!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .inspector_enabled
+        );
         assert_eq!(
-            result.options.per_isolate.per_env.debug_options.host_port.host,
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .host_port
+                .host,
             "0.0.0.0"
         );
-        assert_eq!(result.options.per_isolate.per_env.debug_options.host_port.port, 9230);
+        assert_eq!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .host_port
+                .port,
+            9230
+        );
     }
 
     #[test]
     fn test_inspect_port_zero() {
         let result = parse_args(svec!["--inspect-port", "0"]).unwrap();
-        assert_eq!(result.options.per_isolate.per_env.debug_options.host_port.port, 0);
+        assert_eq!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .host_port
+                .port,
+            0
+        );
     }
 
     // ==================== Env File Options Tests ====================
@@ -4010,7 +4112,10 @@ mod tests {
     fn test_env_file_if_exists_option() {
         let result = parse_args(svec!["--env-file-if-exists", ".env.local", "script.js"]).unwrap();
         assert!(result.options.per_isolate.per_env.has_env_file_string);
-        assert_eq!(result.options.per_isolate.per_env.optional_env_file, ".env.local");
+        assert_eq!(
+            result.options.per_isolate.per_env.optional_env_file,
+            ".env.local"
+        );
     }
 
     // ==================== Boolean Options Tests ====================
@@ -4054,7 +4159,13 @@ mod tests {
     #[test]
     fn test_no_extra_info_on_fatal_exception() {
         let result = parse_args(svec!["--no-extra-info-on-fatal-exception"]).unwrap();
-        assert!(!result.options.per_isolate.per_env.extra_info_on_fatal_exception);
+        assert!(
+            !result
+                .options
+                .per_isolate
+                .per_env
+                .extra_info_on_fatal_exception
+        );
     }
 
     #[test]
@@ -4110,8 +4221,13 @@ mod tests {
     #[test]
     fn test_unknown_option_passed_to_v8() {
         // Unknown options are passed through as V8 args, not treated as errors
-        let result = parse_args(svec!["--unknown-option-that-does-not-exist", "script.js"]).unwrap();
-        assert!(result.v8_args.contains(&"--unknown-option-that-does-not-exist".to_string()));
+        let result =
+            parse_args(svec!["--unknown-option-that-does-not-exist", "script.js"]).unwrap();
+        assert!(
+            result
+                .v8_args
+                .contains(&"--unknown-option-that-does-not-exist".to_string())
+        );
     }
 
     // ==================== Integer Option Tests ====================
@@ -4140,9 +4256,32 @@ mod tests {
             "--arg1"
         ])
         .unwrap();
-        assert!(result.options.per_isolate.per_env.debug_options.inspector_enabled);
-        assert!(result.options.per_isolate.per_env.debug_options.break_first_line);
-        assert_eq!(result.options.per_isolate.per_env.debug_options.host_port.port, 9230);
+        assert!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .inspector_enabled
+        );
+        assert!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .break_first_line
+        );
+        assert_eq!(
+            result
+                .options
+                .per_isolate
+                .per_env
+                .debug_options
+                .host_port
+                .port,
+            9230
+        );
         assert!(!result.options.per_isolate.per_env.warnings);
         assert!(result.options.per_isolate.per_env.enable_source_maps);
         assert_eq!(result.remaining_args, svec!["script.js", "--arg1"]);
@@ -4162,8 +4301,14 @@ mod tests {
         ])
         .unwrap();
         assert!(result.options.per_isolate.per_env.test_runner);
-        assert_eq!(result.options.per_isolate.per_env.test_runner_timeout, 10000);
-        assert_eq!(result.options.per_isolate.per_env.test_runner_concurrency, 2);
+        assert_eq!(
+            result.options.per_isolate.per_env.test_runner_timeout,
+            10000
+        );
+        assert_eq!(
+            result.options.per_isolate.per_env.test_runner_concurrency,
+            2
+        );
         assert_eq!(
             result.options.per_isolate.per_env.test_reporter,
             svec!["spec"]
@@ -4185,7 +4330,10 @@ mod tests {
             result.options.per_isolate.per_env.preload_esm_modules,
             svec!["./register.js"]
         );
-        assert_eq!(result.options.per_isolate.per_env.conditions, svec!["development"]);
+        assert_eq!(
+            result.options.per_isolate.per_env.conditions,
+            svec!["development"]
+        );
         assert_eq!(result.remaining_args, svec!["script.js"]);
     }
 }
