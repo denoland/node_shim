@@ -1,3 +1,5 @@
+// Copyright the Deno authors. MIT license.
+
 /*!
  * Node.js CLI Argument Parser - Rust Implementation
  *

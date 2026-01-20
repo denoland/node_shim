@@ -1,3 +1,5 @@
+// Copyright the Deno authors. MIT license.
+
 use exec::execvp;
 use node_shim::ParseResult;
 use std::env;
