@@ -2983,10 +2983,11 @@ pub fn wrap_eval_code(source_code: &str) -> String {
 
     format!(
         r#"(
+    globalThis.require = process.getBuiltinModule("module").createRequire(import.meta.url),
     process.getBuiltinModule("module").builtinModules
       .filter((m) => !/\/|crypto|process/.test(m))
       .forEach((m) => {{ globalThis[m] = process.getBuiltinModule(m); }}),
-    vm.runInThisContext({})
+    process.getBuiltinModule("vm").runInThisContext({})
   )"#,
         json_escaped
     )
