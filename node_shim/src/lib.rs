@@ -2970,7 +2970,7 @@ pub struct TranslatedArgs {
 }
 
 /// Wraps eval code for Node.js compatibility.
-/// Makes builtin modules available as global variables.
+/// Makes builtin modules and `require` available as global variables.
 pub fn wrap_eval_code(source_code: &str) -> String {
     // Use serde_json to properly escape the source code
     let json_escaped = serde_json::to_string(source_code).unwrap_or_else(|_| {
@@ -2983,6 +2983,7 @@ pub fn wrap_eval_code(source_code: &str) -> String {
 
     format!(
         r#"(
+    globalThis.require = process.getBuiltinModule("module").createRequire(import.meta.url),
     process.getBuiltinModule("module").builtinModules
       .filter((m) => !/\/|crypto|process/.test(m))
       .forEach((m) => {{ globalThis[m] = process.getBuiltinModule(m); }}),
